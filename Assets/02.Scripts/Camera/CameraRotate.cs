@@ -1,7 +1,7 @@
 using UnityEngine;
 
 // 역할: 마우스 이동에 따라 카메라를 회전한다.
-public class FpsCameraRotate : MonoBehaviour
+public class CameraRotate : MonoBehaviour
 {
     private const float MinVerticalAngle = -90f;
     private const float MaxVerticalAngle = 90f;
