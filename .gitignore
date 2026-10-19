@@ -77,3 +77,6 @@ crashlytics-build.properties
 
 # Rider (JetBrains IDE) 설정 폴더
 .idea/
+
+# macOS Finder 생성 파일
+.DS_Store
