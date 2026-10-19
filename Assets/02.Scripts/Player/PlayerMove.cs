@@ -3,6 +3,13 @@ using UnityEngine;
 public class PlayerMove : MonoBehaviour
 {
     [SerializeField] private float _moveSpeed = 5f;
+    [SerializeField] private CharacterController _characterController;
+
+
+    private void Awake()
+    {
+        _characterController = GetComponent<CharacterController>();
+    }
 
     private void Update()
     {
@@ -18,6 +25,7 @@ public class PlayerMove : MonoBehaviour
         // 월드 좌표계 :  세상을 중심 
 
         // 3. 방향과 속력에 따라 이동한다.
-        transform.position += direction * _moveSpeed * Time.deltaTime;
+        // transform.position += direction * _moveSpeed * Time.deltaTime;
+        _characterController.Move(direction * _moveSpeed * Time.deltaTime);
     }
 }
