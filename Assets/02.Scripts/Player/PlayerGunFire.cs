@@ -4,6 +4,7 @@ public class PlayerGunFire : MonoBehaviour
 {
     [SerializeField] private float _range = 100f;
     [SerializeField] private float _damage = 10f;
+    [SerializeField] private ParticleSystem _hitEffectPrefab;
 
     private void Update()
     {
@@ -53,5 +54,10 @@ public class PlayerGunFire : MonoBehaviour
         Debug.Log(
             $"명중: {hitInfo.collider.gameObject.name}, 공격력: {_damage}",
             this);
+
+        ParticleSystem effect = Instantiate(_hitEffectPrefab);
+        effect.transform.position = hitInfo.point; // 맞은 자리
+        effect.transform.forward = hitInfo.normal; // 수직 위치로 회전
+        effect.Play();
     }
 }
