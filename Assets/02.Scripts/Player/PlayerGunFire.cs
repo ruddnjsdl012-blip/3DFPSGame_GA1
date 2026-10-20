@@ -5,12 +5,18 @@ public class PlayerGunFire : MonoBehaviour
     [SerializeField] private float _range = 100f;
     [SerializeField] private float _damage = 10f;
     [SerializeField] private ParticleSystem _hitEffectPrefab;
+    [SerializeField] private float _fireinterval = 0.1f;
+    private float _fireTimer = 0f;
 
     private void Update()
     {
-        // 마우스 왼쪽 버튼을 누르면 발사한다.
-        if (Input.GetButtonDown("Fire1"))
+        // 발사 대기 시간을 줄인다.
+        _fireTimer -= Time.deltaTime;
+
+        // 왼쪽 버튼을 누르고 있는 동안 발사 간격마다 발사한다.
+        if (Input.GetButton("Fire1") && _fireTimer <= 0f)
         {
+            _fireTimer = _fireinterval;
             Shoot();
         }
     }
