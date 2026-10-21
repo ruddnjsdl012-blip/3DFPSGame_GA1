@@ -435,7 +435,8 @@ Transform:
   m_LocalPosition: {x: 0, y: 0.1, z: 0.7}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
-  m_Children: []
+  m_Children:
+  - {fileID: 600100001}
   m_Father: {fileID: 1111193195}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!114 &330585547
@@ -635,6 +636,51 @@ MonoBehaviour:
   m_ShadowLayerMask: 1
   m_RenderingLayers: 1
   m_ShadowRenderingLayers: 1
+--- !u!114 &500100001
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1138909045}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: b9e94597fd62c9c4dad880cd6c6b81ee, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::PlayerBombFire
+  _firePoint: {fileID: 600100001}
+  _bombPrefab: {fileID: 2760264130400531067, guid: 97351501020021541ad67be108a0e282, type: 3}
+  _aimCamera: {fileID: 330585545}
+  _maxChargeTime: 1.5
+  _minThrowPower: 6
+  _maxThrowPower: 22
+  _upwardBias: 0.12
+  _remainingBombs: 10
+  _chargeTime: 0
+--- !u!114 &500100002
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1138909045}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 8f93261cab375776b06139dc1d595075, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::BombPool
+--- !u!114 &500100003
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1138909045}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: eef64561a62252698a9cb69f6bdc52d2, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::PlayerBombHud
 --- !u!1 &556911091
 GameObject:
   m_ObjectHideFlags: 0
@@ -725,6 +771,37 @@ MeshFilter:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 556911091}
   m_Mesh: {fileID: 10207, guid: 0000000000000000e000000000000000, type: 0}
+--- !u!1 &600100000
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 600100001}
+  m_Layer: 0
+  m_Name: BombFirePoint
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &600100001
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 600100000}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0.28, y: -0.18, z: 0.55}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 330585546}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &690283205
 GameObject:
   m_ObjectHideFlags: 0
@@ -1057,6 +1134,9 @@ GameObject:
   - component: {fileID: 1138909051}
   - component: {fileID: 1138909052}
   - component: {fileID: 1138909053}
+  - component: {fileID: 500100001}
+  - component: {fileID: 500100002}
+  - component: {fileID: 500100003}
   m_Layer: 0
   m_Name: Player
   m_TagString: Untagged
@@ -1236,6 +1316,7 @@ MonoBehaviour:
   _range: 100
   _damage: 10
   _hitEffectPrefab: {fileID: 19800002, guid: 54dd9cb5740188a488b8baebbf19207c, type: 3}
+  _fireinterval: 0.1
 --- !u!1 &1178356343
 GameObject:
   m_ObjectHideFlags: 0

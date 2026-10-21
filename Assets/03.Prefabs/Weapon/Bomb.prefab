@@ -154,3 +154,4 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::Bomb
   _explosionEffectPrefab: {fileID: 19800006, guid: 8a4aceaf2957c044480166b429f4c7d0, type: 3}
+  _maxFlightTime: 12
