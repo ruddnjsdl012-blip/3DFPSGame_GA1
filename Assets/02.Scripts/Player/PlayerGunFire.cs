@@ -1,6 +1,7 @@
 using System.Collections;
 using UnityEngine;
 
+
 // 마우스 왼쪽 버튼을 누르면 바라보는 방향으로 총알을 발사하고 싶다.
 public class PlayerGunFire : MonoBehaviour
 {
@@ -16,10 +17,12 @@ public class PlayerGunFire : MonoBehaviour
     private int _bulletCount = 0;
     private Coroutine _reloadCoroutine = null;
 
+
     private void Start()
     {
         _bulletCount = _maxBulletCount;
     }
+
 
     private void Update()
     {
@@ -63,6 +66,7 @@ public class PlayerGunFire : MonoBehaviour
         _reloadCoroutine = null;
     }
 
+
     private void Shoot()
     {
         // Ray: 레이저(시작위치, 날아갈 방향)
@@ -78,21 +82,19 @@ public class PlayerGunFire : MonoBehaviour
 
         // 4. 레이를 발사하고, 만일 부딛힌 물체가 있다면 이펙트 표시하기
         bool isHit = Physics.Raycast(ray, out hitInfo, _range);
-
         if (isHit)
         {
             // Debug.Log($"{hitInfo.collider.name}이 총알을 맞았다. 대미지: {_damage}");
+
             // 맞은 자리에 총알 자국 이펙트 만들기
             ParticleSystem effect = Instantiate(_hitEffectPrefab);
             effect.transform.position = hitInfo.point; // 맞은 자리
             effect.transform.forward = hitInfo.normal; // 수직 위치로 회전
             effect.Play();
 
-            // 맞은 대상이 좀비라면 TakeDamege
-            if (hitInfo.collider.TryGetComponent(out Zombie zombie))
-            {
-                zombie.TakeDamage(_damage);
-            }
+
+            hitInfo.collider.GetComponent<Zombie>()?.TakeDamage(_damage);
+            hitInfo.collider.GetComponent<Drum>()?.Damage(_damage);
         }
     }
 }
