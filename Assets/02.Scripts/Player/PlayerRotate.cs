@@ -1,6 +1,7 @@
 using UnityEngine;
 
-// 역할: 마우스 좌우 이동에 따라 플레이어를 회전한다.
+// 좌우 회전은 플레이어 한 곳에서만 처리한다.
+[DefaultExecutionOrder(-50)]
 public class PlayerRotate : MonoBehaviour
 {
     private const float FullRotationAngle = 360f;
@@ -11,7 +12,7 @@ public class PlayerRotate : MonoBehaviour
 
     private void Awake()
     {
-        _horizontalAngle = transform.eulerAngles.y;
+        _horizontalAngle = transform.localEulerAngles.y;
     }
 
     private void Update()
@@ -21,16 +22,12 @@ public class PlayerRotate : MonoBehaviour
             return;
         }
 
+        // Mouse X는 프레임 사이의 마우스 이동량이다.
         float mouseX = Input.GetAxis("Mouse X");
-        _horizontalAngle += mouseX * _rotationSpeed;
         _horizontalAngle = Mathf.Repeat(
-            _horizontalAngle,
+            _horizontalAngle + mouseX * _rotationSpeed,
             FullRotationAngle);
 
-        // 플레이어는 Y축으로만 회전한다.
-        transform.eulerAngles = new Vector3(
-            0f,
-            _horizontalAngle,
-            0f);
+        transform.localRotation = Quaternion.Euler(0f, _horizontalAngle, 0f);
     }
 }

@@ -1,0 +1,38 @@
+{
+  "baseline": "Lesson11_Complete_Import.unitypackage",
+  "changed_assets": [
+    "Assets/01.Scenes/GameScene.unity",
+    "Assets/02.Scripts/Player/PlayerRotate.cs",
+    "Assets/02.Scripts/Camera/CameraRotate.cs"
+  ],
+  "structural_checks": [
+    "Scene has unique IDs, no dangling local references, reciprocal hierarchy; only four intended records change and two redundant components are removed",
+    "Exactly one CameraRotate on CameraPosition; Main Camera inherits yaw and pitch with no redundant CameraFollow",
+    "Initial camera world position/orientation preserved; camera sits at its pitch pivot to prevent orbital position changes while looking vertically",
+    "Only scene and two look scripts change; GUIDs preserved; execution order stored in code and metadata; existing game-state gates retained"
+  ],
+  "behavior_checks": {
+    "passed": 5,
+    "cases": [
+      "Input is blocked in missing-manager/Ready/Pause/GameOver/Clear; Playing reads Mouse X/Y once and separates body yaw from pivot pitch",
+      "Starting rotation is preserved; pitch clamps at +/-90; yaw wraps; camera stays at its eye position while pitching; no drift over 1000 idle updates",
+      "Equal total mouse delta produces equal view at 30/60/144 Hz; variable-frame alternating input is invariant to parent/child rotation order",
+      "Player and camera rotation orders precede default-order movement/shooting, so firing uses this frame's aim",
+      "Original three world-rotation writers reproduce different camera directions for different legal Update orders; fixed hierarchy is order invariant"
+    ],
+    "mode": "Actual old and patched look scripts compiled and executed against a test-only quaternion/hierarchy model; no Unity Editor"
+  },
+  "initial_camera_world_position": [
+    0,
+    1.6,
+    0.7
+  ],
+  "native_unity_validation": {
+    "editor_available": false,
+    "import_executed": false,
+    "play_executed": false,
+    "profiler_executed": false
+  },
+  "limits": "A deterministic duplicate-rotation issue is corrected and reproduced in an API model. Actual perceived smoothness, FPS, display synchronization and OS mouse polling require a Unity Play check.",
+  "manual_check": "After Ready/Start, slowly sweep mouse left/right/up/down; walk and shoot while turning; pause/resume with P; confirm all 11-chapter flow remains."
+}

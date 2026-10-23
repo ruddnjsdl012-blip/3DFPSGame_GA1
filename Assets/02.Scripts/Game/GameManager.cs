@@ -18,7 +18,6 @@ public class GameManager : MonoBehaviour
     [SerializeField] private TextMeshProUGUI _hintText;
     [SerializeField] private Button _restartButton;
     [SerializeField] private CursorManager _cursorManager;
-
     [Header("시작 연출")]
     [Tooltip("켜면 준비 2초 대신 3, 2, 1을 각각 1초 보여 줍니다.")]
     [SerializeField] private bool _useCountdown;
