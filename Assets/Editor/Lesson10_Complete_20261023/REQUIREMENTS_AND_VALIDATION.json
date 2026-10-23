@@ -1,0 +1,126 @@
+{
+  "version": "Lesson10_Complete_20261023",
+  "source": "test(20261023-051611).unitypackage",
+  "spec_url": "https://fluoridated-libra-ce2.notion.site/10-402d025da08780ddb006fa98ca8c590d",
+  "requirements": [
+    {
+      "section": "10.1",
+      "title": "Canvas modes and reference resolution",
+      "implementation": "Overlay HUD; world-space zombie bar; 1920x1080 scale with screen size, match 0.5",
+      "status": "implemented; static/API-stub validation passed"
+    },
+    {
+      "section": "10.2",
+      "title": "Zombie prefab health bar",
+      "implementation": "100x12 at y=1.4 with scale .01; red fill, no handle, no input, no world raycaster",
+      "status": "implemented; static/API-stub validation passed"
+    },
+    {
+      "section": "10.3",
+      "title": "Health display on change",
+      "implementation": "Private zombie health; read-only properties; one root controller writes Slider only when health or capacity changes",
+      "status": "implemented; static/API-stub validation passed"
+    },
+    {
+      "section": "10.4",
+      "title": "Canvas billboard",
+      "implementation": "LateUpdate rotates only HealthBarCanvas to cached camera forward",
+      "status": "implemented; static/API-stub validation passed"
+    },
+    {
+      "section": "10.5.1",
+      "title": "Player HUD layout",
+      "implementation": "640x140 bottom-left group; 600x80 health at (20,45), 600x50 stamina at (20,12); required colors",
+      "status": "implemented; static/API-stub validation passed"
+    },
+    {
+      "section": "10.5.2",
+      "title": "Player health",
+      "implementation": "Awake initializes 100; IDamageable reduces health and clamps at zero; dead player ignores more damage",
+      "status": "implemented; static/API-stub validation passed"
+    },
+    {
+      "section": "10.5.3",
+      "title": "Zombie attack",
+      "implementation": "TryGetComponent<IDamageable>; damage 10 each 1.2 seconds inside range with hit point and normal",
+      "status": "implemented; static/API-stub validation passed"
+    },
+    {
+      "section": "10.5.4",
+      "title": "Stamina model",
+      "implementation": "MaxStamina=100 and public getter; both Shift keys, jump costs and non-consumption-frame recovery",
+      "status": "implemented; static/API-stub validation passed"
+    },
+    {
+      "section": "10.5.5",
+      "title": "HUD data binding",
+      "implementation": "All references stored; display-only normalized values; no notifications and only writes on changes",
+      "status": "implemented; static/API-stub validation passed"
+    },
+    {
+      "section": "10.6",
+      "title": "Damage flash",
+      "implementation": "Fullscreen red Image, alpha 0.4 fading to zero over 0.3 seconds; coroutine restarts on repeated hit; Player linked",
+      "status": "implemented; static/API-stub validation passed"
+    }
+  ],
+  "serialized_asset_validation": {
+    "passed": 7,
+    "checks": [
+      "Scene and prefab YAML parse; unique file IDs; no dangling local references; reciprocal component and transform ownership",
+      "Exactly one HUD controller and prefab zombie bar; Player, PlayerMove, Sliders, flash and canvas explicitly linked",
+      "10.1 / 10.5: overlay scaling and exact bottom-left HUD sizes, positions, red/yellow fills, zero horizontal gaps",
+      "All three Sliders have assigned Fill Rect, normalized range, left-to-right fill and no input, handle or transition",
+      "10.2 / 10.3 / 10.4: world bar at height 1.4, size 100x12, scale .01, no raycaster; zombie stats 30/10/1.2",
+      "10.6: full-screen transparent red flash, first canvas child, nonblocking, configured .4 alpha and .3-second fade",
+      "Only eight chapter-related existing assets changed; original GUIDs/metas, world geometry, camera, crosshair, gun/bomb/pool and zombie placement preserved"
+    ],
+    "scene_records": 137,
+    "prefab_records": 29,
+    "changed_existing_assets": 8,
+    "unity_editor_executed": false
+  },
+  "csharp_behavior_validation": {
+    "passed": 10,
+    "cases": [
+      "Player initializes in Awake, loses health, clamps at zero, ignores damage after death",
+      "Zombie attacks for 10 every 1.2 seconds in range; leaving range prevents damage",
+      "IDamageable dispatch sends damage, point and normal; missing targets/components are guarded",
+      "Zombie health 30 to 20 to 10 to zero; missing blood effect guarded; death ignores more damage",
+      "Both Shift keys consume sprint stamina; jump costs 20; rest recovers 15/s; capacity and affordability respected",
+      "HUD displays current ratios, detects max-health changes, guards zero max and skips 10000 unchanged-frame writes",
+      "HUD missing serialized references disable the component with a diagnostic",
+      "World health bar displays damage, caches unchanged values, resolves child references and billboards canvas without rotating zombie",
+      "Hit flash starts at 0.4, fades over 0.3 seconds and restarts a single coroutine on repeated damage",
+      "Disable and zero-duration paths clean up; Player.TakeDamage invokes the linked flash"
+    ],
+    "mode": "Actual six changed scripts compiled and executed against test-only Unity API stubs; no Unity Editor"
+  },
+  "compiler": {
+    "name": "Roslyn",
+    "language_version": "9.0",
+    "result": "success; no errors",
+    "input": "Six changed gameplay scripts plus original DamageInfo and IDamageable; test-only Unity API model",
+    "warnings": "CS0649 on Inspector-assigned fields; their scene/prefab references were checked separately"
+  },
+  "package_scope": "Eight existing assets updated with original GUIDs; documentation and original eight-file rollback package included",
+  "native_unity_validation": {
+    "editor_available": false,
+    "import_executed": false,
+    "play_executed": false,
+    "profiler_executed": false
+  },
+  "native_acceptance_checks": [
+    "Import all into the original project with Play mode off; reopen GameScene after compilation.",
+    "Play: Shift and Jump lower the yellow bar; resting restores it.",
+    "Stand near zombie: health falls by 10 every 1.2s, with the 0.3s red flash behind HUD.",
+    "Shoot zombie: health bar falls in 10/30 steps and stays facing the camera while the zombie turns."
+  ],
+  "not_added": [
+    "Chapter 11 game over",
+    "Optional comeback-heal behavior from prior chapter"
+  ],
+  "limitations": [
+    "API-model behavior tests do not validate Unity Editor import, real rendering, input configuration beyond direct Shift keys, physics, or frame timing."
+  ]
+}

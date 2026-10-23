@@ -3,7 +3,8 @@ using UnityEngine;
 
 public class PlayerGunFire : MonoBehaviour
 {
-    [SerializeField] private ParticleSystem _hitEffectPrefab;
+    [SerializeField]
+    private ParticleSystem _hitEffectPrefab;
 
     [Header("스탯")]
     [SerializeField] private int _maxBulletCount = 30;

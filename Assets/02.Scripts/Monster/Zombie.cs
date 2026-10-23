@@ -23,26 +23,31 @@ public class Zombie : MonoBehaviour, IDamageable
     [Header("스탯")]
     [SerializeField] private float _detectDistance = 8; // 플레이어를 발견하는 거리
     [SerializeField] private float _combackDistance = 15; // 처음 자리에서 이만큼 멀어지면 돌아가는 거리
+    [SerializeField] private float _attackDamage = 10f; // 공격 대미지
     [SerializeField] private float _attackRange = 1.5f; // 공격 범위
     [SerializeField] private float _attackInterval = 1.2f; // 공격 간격
     [SerializeField] private float _moveSpeed = 5; // 이동속도
-    [SerializeField] private float _health;
-    [SerializeField] private float _maxhealth = 30;
+    [SerializeField] private float _maxHealth = 30;
+    private float _health;
+
     [Header("이펙트")]
     [SerializeField] private GameObject _bloodSprayPrefab;
 
-    public float MAxHealth => _maxhealth;
     private float _attackTimer = 0f;
     private CharacterController _controller;
     private Vector3 _startPosition;
     private GameObject _player;
+
+    public float MaxHealth => _maxHealth;
     public float Health => _health;
+
 
     private ZombieState _state = ZombieState.Idle;
 
     private void Start()
     {
-        _health = _maxhealth;
+        _health = _maxHealth;
+
         _controller = GetComponent<CharacterController>();
         _startPosition = transform.position;
 
@@ -53,6 +58,11 @@ public class Zombie : MonoBehaviour, IDamageable
 
     private void Update()
     {
+        if (_player == null)
+        {
+            return;
+        }
+
         switch (_state)
         {
             case ZombieState.Idle:
@@ -81,17 +91,19 @@ public class Zombie : MonoBehaviour, IDamageable
             return;
         }
 
-        _health -= damageInfo.Value;
+        _health = Mathf.Max(0f, _health - damageInfo.Value);
 
         StopAllCoroutines();
 
         if (_health > 0f)
         {
             // 좀비의 자식으로 블러드 스프레이를 생성! -> 위치 수정!
-            GameObject bloodSpray = Instantiate(_bloodSprayPrefab, transform);
-            //bloodSpray.transform.SetParent(transform);
-            bloodSpray.transform.position = damageInfo.HitPoint;
-            bloodSpray.transform.forward = damageInfo.HitNormal;
+            if (_bloodSprayPrefab != null)
+            {
+                GameObject bloodSpray = Instantiate(_bloodSprayPrefab, transform);
+                bloodSpray.transform.position = damageInfo.HitPoint;
+                bloodSpray.transform.forward = damageInfo.HitNormal;
+            }
 
             // 잠깐 멈칫 하고 싶다!
             Debug.Log($"{_state} -> Hit");
@@ -197,14 +209,27 @@ public class Zombie : MonoBehaviour, IDamageable
         {
             Debug.Log($"{_state} -> Trace");
             _state = ZombieState.Trace;
+            return;
         }
 
         _attackTimer += Time.deltaTime;
         if (_attackTimer >= _attackInterval)
         {
             // Todo. 공격 애니메이션 실행
-            // Todo. 플레이어를 때려!
-            Debug.Log("플레이어를 때렸습니다.");
+
+
+            if (_player.TryGetComponent(out IDamageable damageable))
+            {
+                DamageInfo info = new DamageInfo
+                {
+                    Value = _attackDamage,
+                    HitPoint = _player.transform.position,
+                    HitNormal = (transform.position - _player.transform.position).normalized
+                };
+
+                damageable.TakeDamage(info);
+            }
+
             _attackTimer = 0f;
         }
     }
