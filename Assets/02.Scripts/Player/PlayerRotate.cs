@@ -16,8 +16,12 @@ public class PlayerRotate : MonoBehaviour
 
     private void Update()
     {
-        float mouseX = Input.GetAxis("Mouse X");
+        if (GameManager.IsPlaying == false)
+        {
+            return;
+        }
 
+        float mouseX = Input.GetAxis("Mouse X");
         _horizontalAngle += mouseX * _rotationSpeed;
         _horizontalAngle = Mathf.Repeat(
             _horizontalAngle,

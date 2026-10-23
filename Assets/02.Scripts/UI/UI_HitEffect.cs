@@ -50,7 +50,7 @@ public class UI_HitEffect : MonoBehaviour
         {
             yield return null;
 
-            elapsed += Time.deltaTime;
+            elapsed += Time.unscaledDeltaTime;
             SetAlpha(Mathf.Lerp(_maxAlpha, 0f, elapsed / _fadeTime));
         }
 

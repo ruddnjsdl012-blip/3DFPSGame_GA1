@@ -1,0 +1,175 @@
+{
+  "source_package": "test(20261023-055830).unitypackage",
+  "spec_url": "https://fluoridated-libra-ce2.notion.site/11-402d025da087802c8ad9f617e66d3d55",
+  "scope": "11.1 through 11.6 including exercises 1 through 5",
+  "requirements": [
+    {
+      "section": "11.1",
+      "implemented": true,
+      "description": "GameManager owns Ready, Playing, GameOver plus exercise Clear and Pause states"
+    },
+    {
+      "section": "11.2",
+      "implemented": true,
+      "description": "Korean font source, 2527-character static 2048x2048 SDF, native dynamic multi-atlas fallback, centered 120-point status text"
+    },
+    {
+      "section": "11.3",
+      "implemented": true,
+      "description": "Singleton with correct duplicate guard; Ready 2 seconds then Start 0.5 seconds; hide message before Playing"
+    },
+    {
+      "section": "11.4",
+      "implemented": true,
+      "description": "Six behavior Update methods block input, timers, movement and AI outside Playing; display/follow scripts remain active"
+    },
+    {
+      "section": "11.5",
+      "implemented": true,
+      "description": "Player zero-health transition notifies GameManager once; red Game Over, cursor release, frozen simulation"
+    },
+    {
+      "section": "11.6.1",
+      "implemented": true,
+      "description": "R restarts after Game Over or Clear, restoring timeScale before reloading the current scene"
+    },
+    {
+      "section": "11.6.2",
+      "implemented": true,
+      "description": "Retry TMP button stored in scene with persistent OnClick to the same public RestartGame action"
+    },
+    {
+      "section": "11.6.3",
+      "implemented": true,
+      "description": "One enemy search at start; idempotent death notifications; last enemy shows green victory and freezes the game"
+    },
+    {
+      "section": "11.6.4",
+      "implemented": true,
+      "description": "P toggles Pause and Playing with timeScale and cursor handling; remains responsive at timeScale zero"
+    },
+    {
+      "section": "11.6.5",
+      "implemented": true,
+      "description": "Optional Use Countdown setting substitutes 3-2-1 for Ready, each number lasting one second"
+    }
+  ],
+  "behavior_checks": {
+    "passed": 9,
+    "cases": [
+      "First singleton survives; duplicates are removed; Ready lasts 2 seconds, Start 0.5 seconds, then gameplay and hidden text",
+      "Exercise 5: optional 3-2-1 countdown displays each number for one second before Start",
+      "All six actual Update methods block before input/timers when missing manager or Ready, and run in Playing",
+      "Exercise 4: P pauses/resumes simulation and cursor; gameplay and damage stay blocked; R is not restart during pause",
+      "Exercise 3: one startup zombie search; death notifications count once; last kill shows green victory and freezes simulation",
+      "11.5 + exercises 1/2: fatal damage shows red Game Over; R and public button action share a guarded restart; time and singleton reset",
+      "Fatal hit flash still fades from .4 to zero in .3 seconds while gameplay timeScale is zero",
+      "Interrupted Ready sequence cannot overwrite Game Over later",
+      "Editor setup registers restart scene idempotently and preserves other build scenes"
+    ],
+    "mode": "Actual gameplay scripts and editor registration executed against test-only Unity API models; no Unity Editor",
+    "compiled_actual_files": [
+      "patch/Assets/02.Scripts/Camera/CameraRotate.cs",
+      "patch/Assets/02.Scripts/Game/GameManager.cs",
+      "patch/Assets/02.Scripts/Game/GameState.cs",
+      "patch/Assets/02.Scripts/Monster/Zombie.cs",
+      "patch/Assets/02.Scripts/Player/Player.cs",
+      "patch/Assets/02.Scripts/Player/PlayerBombFire.cs",
+      "patch/Assets/02.Scripts/Player/PlayerGunFire.cs",
+      "patch/Assets/02.Scripts/Player/PlayerMove.cs",
+      "patch/Assets/02.Scripts/Player/PlayerRotate.cs",
+      "patch/Assets/02.Scripts/UI/UI_HitEffect.cs",
+      "patch/Assets/Editor/Lesson11_Complete_20261023/Lesson11BuildSetup.cs",
+      "source/Assets/02.Scripts/Core/DamageInfo.cs",
+      "source/Assets/02.Scripts/Core/IDamageable.cs",
+      "source/Assets/02.Scripts/Game/CursorManager.cs",
+      "source/Assets/02.Scripts/UI/UI_PlayerStats.cs",
+      "source/Assets/02.Scripts/Monster/ZombieHealthBar.cs"
+    ],
+    "compiler_errors": 0
+  },
+  "serialized_asset_checks": {
+    "passed": 9,
+    "checks": [
+      "Scene and both TMP font assets parse; unique file IDs and valid local references; scene hierarchy/component ownership reciprocal",
+      "One GameManager connected to state text, hint, retry button and original cursor; retry hidden before result; manager registered as scene root",
+      "11.2/11.6: centered TMP text at exact size/position; all text uses Korean SDF; retry image accepts clicks and persistent OnClick calls RestartGame; EventSystem enabled",
+      "Existing scene records, HUD, hit-effect draw order, crosshair, weapons, map, camera and all prior GUID/meta identities preserved; only root/canvas child lists extend",
+      "11.4: each of six Update methods has a braced, null-safe state guard before input and timers; display/follow controllers are outside the gate",
+      "11.2: 2527 prebuilt static characters include 2350 KS X 1001 syllables; native dynamic fallback has source font, empty readable atlas, multi-atlas and clear-on-build; rare 똠 available",
+      "Static atlas is 2048x2048 Alpha8 (4 MiB); every glyph rect is inside, nonoverlapping and has visible pixels; SDF materials/shader/include self-contained with .2 outline",
+      "TMP bootstrap template references packaged default Korean font, style sheet and line-breaking assets; existing TMP settings are left intact",
+      "Unique asset GUIDs and metadata present for every import asset; original font and uGUI license notices packaged"
+    ],
+    "scene_records": 157,
+    "new_scene_records": 20,
+    "import_asset_count_before_docs": 24,
+    "native_unity_editor_executed": false
+  },
+  "font_data_checks": {
+    "characters": 2527,
+    "ks_x_1001_hangul": 2350,
+    "glyphs": 2527,
+    "atlas_size": 2048,
+    "atlas_format": "Alpha8",
+    "sampling_point_size": 32,
+    "padding": 5,
+    "static_population_mode": true,
+    "dynamic_fallback_multi_atlas": true,
+    "source_font": "Assets/08.Fonts/MainFont-Bold.ttf",
+    "rare_test_character": "똠",
+    "rare_character_exists_in_source": true,
+    "generation": "FreeType/Pillow supersampling and signed Euclidean distances; no Unity Editor bake executed"
+  },
+  "existing_assets_changed": [
+    "Assets/01.Scenes/GameScene.unity",
+    "Assets/02.Scripts/Camera/CameraRotate.cs",
+    "Assets/02.Scripts/Game/GameManager.cs",
+    "Assets/02.Scripts/Monster/Zombie.cs",
+    "Assets/02.Scripts/Player/Player.cs",
+    "Assets/02.Scripts/Player/PlayerBombFire.cs",
+    "Assets/02.Scripts/Player/PlayerGunFire.cs",
+    "Assets/02.Scripts/Player/PlayerMove.cs",
+    "Assets/02.Scripts/Player/PlayerRotate.cs",
+    "Assets/02.Scripts/UI/UI_HitEffect.cs"
+  ],
+  "new_assets": [
+    "Assets/02.Scripts/Game/GameState.cs",
+    "Assets/08.Fonts/KoreanCharacters.txt",
+    "Assets/08.Fonts/MainFont-Bold Fallback SDF.asset",
+    "Assets/08.Fonts/MainFont-Bold SDF.asset",
+    "Assets/08.Fonts/MainFont-Bold.ttf",
+    "Assets/08.Fonts/Pretendard-LICENSE.txt",
+    "Assets/08.Fonts/Shaders/Lesson11_SDF.shader",
+    "Assets/08.Fonts/Shaders/TMPro_Properties.cginc",
+    "Assets/08.Fonts/Shaders/Unity-uGUI-LICENSE.md",
+    "Assets/08.Fonts/TMP Support/Default Style Sheet.asset",
+    "Assets/08.Fonts/TMP Support/LineBreaking Following Characters.txt",
+    "Assets/08.Fonts/TMP Support/LineBreaking Leading Characters.txt",
+    "Assets/Editor/Lesson11_Complete_20261023/Lesson11BuildSetup.cs",
+    "Assets/Editor/Lesson11_Complete_20261023/TMPSettingsTemplate.asset.bytes"
+  ],
+  "compatibility": [
+    "Original void IDamageable.TakeDamage is preserved; Player adds bool TryTakeDamage without requiring a new DamageInfo.Attacker field.",
+    "Source weapon mechanics and prior UI/stat mechanics remain; state gating is applied before input/timers.",
+    "Hit fade uses unscaled time; zombie death cleanup uses realtime so terminal freeze does not strand them.",
+    "Existing TMP settings are preserved; a default Korean configuration is created only if the project has none under Assets."
+  ],
+  "font_generation": "Offline supersampled FreeType distance fields in native-compatible TMP assets; dynamic fallback uses Unity FontEngine at runtime.",
+  "native_unity_validation": {
+    "editor_available": false,
+    "import_executed": false,
+    "play_executed": false,
+    "profiler_executed": false,
+    "limitations": "API models do not validate real rendering, Unity deserialization, physics, event routing, or runtime dynamic-font population."
+  },
+  "manual_acceptance_checks": [
+    "Play mode off: import all, wait for compilation, reopen GameScene.",
+    "Ready/Start: no movement, camera rotation, firing, reloading, throws, or zombie AI.",
+    "P pauses and resumes physics/input and toggles cursor.",
+    "Player death shows red Game Over and retry; R and button restart from Ready with full health/ammo.",
+    "Kill all zombies: green victory; retry restarts the same scene.",
+    "Use Countdown checkbox on GameManager selects 3-2-1.",
+    "Optional font check: enter 똠방각하 in StateText and Play to populate the dynamic fallback."
+  ]
+}

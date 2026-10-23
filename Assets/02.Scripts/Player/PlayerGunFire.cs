@@ -3,8 +3,7 @@ using UnityEngine;
 
 public class PlayerGunFire : MonoBehaviour
 {
-    [SerializeField]
-    private ParticleSystem _hitEffectPrefab;
+    [SerializeField] private ParticleSystem _hitEffectPrefab;
 
     [Header("스탯")]
     [SerializeField] private int _maxBulletCount = 30;
@@ -24,8 +23,12 @@ public class PlayerGunFire : MonoBehaviour
 
     private void Update()
     {
-        _fireTimer -= Time.deltaTime;
+        if (GameManager.IsPlaying == false)
+        {
+            return;
+        }
 
+        _fireTimer -= Time.deltaTime;
         // 마우스 왼쪽 버튼을 누르고 있으면 연속 발사한다.
         if (Input.GetButton("Fire1")
             && _fireTimer <= 0f

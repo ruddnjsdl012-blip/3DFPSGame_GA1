@@ -18,11 +18,17 @@ public class Player : MonoBehaviour, IDamageable
         _health = _maxHealth;
     }
 
+    // 기존 총/좀비/폭탄의 IDamageable 호출을 그대로 지원한다.
     public void TakeDamage(DamageInfo damageInfo)
     {
-        if (_health <= 0f)
+        TryTakeDamage(damageInfo);
+    }
+
+    public bool TryTakeDamage(DamageInfo damageInfo)
+    {
+        if (_health <= 0f || GameManager.IsPlaying == false)
         {
-            return;
+            return false;
         }
 
         _health = Mathf.Max(0f, _health - damageInfo.Value);
@@ -36,7 +42,9 @@ public class Player : MonoBehaviour, IDamageable
 
         if (_health <= 0f)
         {
-            Debug.Log("플레이어가 쓰러졌다.");
+            GameManager.Instance.GameOver();
         }
+
+        return true;
     }
 }

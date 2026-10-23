@@ -58,6 +58,11 @@ public class Zombie : MonoBehaviour, IDamageable
 
     private void Update()
     {
+        if (GameManager.IsPlaying == false)
+        {
+            return;
+        }
+
         if (_player == null)
         {
             return;
@@ -86,6 +91,11 @@ public class Zombie : MonoBehaviour, IDamageable
     // 대미지를 받는다.
     public void TakeDamage(DamageInfo damageInfo)
     {
+        if (GameManager.IsPlaying == false)
+        {
+            return;
+        }
+
         if (_state == ZombieState.Death)
         {
             return;
@@ -115,6 +125,11 @@ public class Zombie : MonoBehaviour, IDamageable
             Debug.Log($"{_state} -> Death");
             _state = ZombieState.Death;
             StartCoroutine(Death_Coroutine());
+
+            if (GameManager.Instance != null)
+            {
+                GameManager.Instance.NotifyZombieDefeated(this);
+            }
         }
     }
 
@@ -130,7 +145,7 @@ public class Zombie : MonoBehaviour, IDamageable
     private IEnumerator Death_Coroutine()
     {
         _controller.enabled = false;
-        yield return new WaitForSeconds(0.5f);
+        yield return new WaitForSecondsRealtime(0.5f);
         Destroy(gameObject);
     }
 

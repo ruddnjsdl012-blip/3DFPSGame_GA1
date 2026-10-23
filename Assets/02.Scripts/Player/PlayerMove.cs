@@ -31,6 +31,12 @@ public class PlayerMove : MonoBehaviour
 
     private void Update()
     {
+        if (GameManager.IsPlaying == false)
+        {
+            return;
+        }
+
+
         bool usedStamina = false;
 
         float h = Input.GetAxisRaw("Horizontal");
