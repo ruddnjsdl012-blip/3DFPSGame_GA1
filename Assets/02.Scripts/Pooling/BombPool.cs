@@ -3,12 +3,21 @@ using UnityEngine;
 
 // Stack: 대기 중인 객체.
 // HashSet: 대여 중인 객체.
+// 현재 Bomb의 충돌 코드는 Destroy를 사용한다. 재사용은 Return 호출이 필요하다.
 public class BombPool : MonoBehaviour
 {
+    // 현재 Bomb은 폭발 이펙트를 직접 관리한다.
+    // 이 풀에서 이펙트도 대여할 때만 별도 프리팹을 지정한다.
+    [SerializeField] private ParticleSystem _explosionEffectPrefab;
+
     private Stack<Bomb> _availableBombs;
     private Stack<PooledBombExplosion> _availableEffects;
 
-    private readonly HashSet<Bomb> _activeBombs = new HashSet<Bomb>();
+    private readonly Dictionary<Bomb, Collider[]> _ownerColliders =
+        new Dictionary<Bomb, Collider[]>();
+
+    private readonly HashSet<Bomb> _activeBombs =
+        new HashSet<Bomb>();
 
     private readonly HashSet<PooledBombExplosion> _activeEffects =
         new HashSet<PooledBombExplosion>();
@@ -33,6 +42,8 @@ public class BombPool : MonoBehaviour
 
     public bool Initialize(Bomb prefab, int capacity)
     {
+        capacity = Mathf.Max(1, capacity);
+
         if (_initialized)
         {
             return _prefab == prefab && Capacity == capacity;
@@ -40,18 +51,17 @@ public class BombPool : MonoBehaviour
 
         if (prefab == null
             || prefab.GetComponent<Rigidbody>() == null
-            || prefab.GetComponent<SphereCollider>() == null
-            || prefab.ExplosionEffectPrefab == null)
+            || prefab.GetComponent<SphereCollider>() == null)
         {
             Debug.LogError(
-                "BombPool: 폭탄 프리팹에 Rigidbody, SphereCollider, 폭발 이펙트가 필요합니다.",
+                "BombPool: 폭탄 프리팹에 Rigidbody와 SphereCollider가 필요합니다.",
                 this);
 
             return false;
         }
 
         _prefab = prefab;
-        Capacity = Mathf.Max(1, capacity);
+        Capacity = capacity;
 
         _availableBombs = new Stack<Bomb>(Capacity);
         _availableEffects = new Stack<PooledBombExplosion>(Capacity);
@@ -66,12 +76,16 @@ public class BombPool : MonoBehaviour
 
             bomb.name = "Bomb_" + (i + 1).ToString("00");
             bomb.gameObject.SetActive(false);
-            bomb.Initialize(this);
 
             _availableBombs.Push(bomb);
 
+            if (_explosionEffectPrefab == null)
+            {
+                continue;
+            }
+
             ParticleSystem particles = Instantiate(
-                prefab.ExplosionEffectPrefab,
+                _explosionEffectPrefab,
                 _poolRoot.transform);
 
             particles.name = "BombExplosion_" + (i + 1).ToString("00");
@@ -120,11 +134,18 @@ public class BombPool : MonoBehaviour
 
             _activeBombs.Add(candidate);
 
-            candidate.Launch(
-                position,
-                rotation,
-                impulse,
-                ownerColliders);
+            Rigidbody body = candidate.GetComponent<Rigidbody>();
+            Collider bombCollider = candidate.GetComponent<SphereCollider>();
+
+            candidate.transform.SetPositionAndRotation(position, rotation);
+
+            ResetVelocity(body);
+            _ownerColliders[candidate] = ownerColliders;
+
+            candidate.gameObject.SetActive(true);
+
+            SetOwnerCollision(bombCollider, ownerColliders, true);
+            body.AddForce(impulse, ForceMode.Impulse);
 
             bomb = candidate;
             return true;
@@ -173,7 +194,21 @@ public class BombPool : MonoBehaviour
             return;
         }
 
-        bomb.Deactivate();
+        Collider[] ownerColliders;
+
+        if (_ownerColliders.TryGetValue(bomb, out ownerColliders))
+        {
+            SetOwnerCollision(
+                bomb.GetComponent<SphereCollider>(),
+                ownerColliders,
+                false);
+
+            _ownerColliders.Remove(bomb);
+        }
+
+        ResetVelocity(bomb.GetComponent<Rigidbody>());
+
+        bomb.gameObject.SetActive(false);
         _availableBombs.Push(bomb);
     }
 
@@ -190,12 +225,46 @@ public class BombPool : MonoBehaviour
         _availableEffects.Push(effect);
     }
 
+    private static void ResetVelocity(Rigidbody body)
+    {
+#if UNITY_6000_0_OR_NEWER
+        body.linearVelocity = Vector3.zero;
+#else
+        body.velocity = Vector3.zero;
+#endif
+        body.angularVelocity = Vector3.zero;
+    }
+
+    private static void SetOwnerCollision(
+        Collider bombCollider,
+        Collider[] ownerColliders,
+        bool ignore)
+    {
+        if (ownerColliders == null)
+        {
+            return;
+        }
+
+        for (int i = 0; i < ownerColliders.Length; i++)
+        {
+            Collider ownerCollider = ownerColliders[i];
+
+            if (ownerCollider == null || ownerCollider == bombCollider)
+            {
+                continue;
+            }
+
+            Physics.IgnoreCollision(bombCollider, ownerCollider, ignore);
+        }
+    }
+
     private void OnDestroy()
     {
         _disposing = true;
 
         _activeBombs.Clear();
         _activeEffects.Clear();
+        _ownerColliders.Clear();
 
         // 소유자나 씬이 제거될 때 실제 객체를 정리한다.
         if (_poolRoot != null)

@@ -18,7 +18,7 @@ public enum ZombieState
     Death, // 죽음: 쓰러지고 잠시 뒤 사라진다.
 }
 
-public class Zombie : MonoBehaviour
+public class Zombie : MonoBehaviour, IDamageable
 {
     [Header("스탯")]
     [SerializeField] private float _detectDistance = 8; // 플레이어를 발견하는 거리
@@ -28,6 +28,8 @@ public class Zombie : MonoBehaviour
     [SerializeField] private float _moveSpeed = 5; // 이동속도
     [SerializeField] private float _health = 30;
 
+    [Header("이펙트")]
+    [SerializeField] private GameObject _bloodSprayPrefab;
 
     private float _attackTimer = 0f;
     private CharacterController _controller;
@@ -70,19 +72,25 @@ public class Zombie : MonoBehaviour
     }
 
     // 대미지를 받는다.
-    public void TakeDamage(float damage)
+    public void TakeDamage(DamageInfo damageInfo)
     {
         if (_state == ZombieState.Death)
         {
             return;
         }
 
-        _health -= damage;
+        _health -= damageInfo.Value;
 
         StopAllCoroutines();
 
         if (_health > 0f)
         {
+            // 좀비의 자식으로 블러드 스프레이를 생성! -> 위치 수정!
+            GameObject bloodSpray = Instantiate(_bloodSprayPrefab, transform);
+            //bloodSpray.transform.SetParent(transform);
+            bloodSpray.transform.position = damageInfo.HitPoint;
+            bloodSpray.transform.forward = damageInfo.HitNormal;
+
             // 잠깐 멈칫 하고 싶다!
             Debug.Log($"{_state} -> Hit");
             _state = ZombieState.Hit;

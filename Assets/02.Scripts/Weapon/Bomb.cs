@@ -1,167 +1,45 @@
 using UnityEngine;
 
-// 충돌 시 폭발 이펙트를 재생하고 풀로 돌아간다.
-[RequireComponent(typeof(Rigidbody), typeof(SphereCollider))]
+// 무언가에 부딛히면 폭발 이펙트를 남기고 사라지는 폭탄
 public class Bomb : MonoBehaviour
 {
-    [SerializeField]
-    private ParticleSystem _explosionEffectPrefab;
+    [SerializeField] private ParticleSystem _explosionEffectPrefab;
+    [SerializeField] private float _explosionRange = 4.5f;
+    [SerializeField] private float _damage = 100;
 
-    [SerializeField, Min(0.1f)]
-    private float _maxFlightTime = 12f;
 
-    private BombPool _pool;
-    private Rigidbody _body;
-    private Collider[] _colliders;
-    private Collider[] _ownerColliders;
-
-    private float _lifeRemaining;
-    private bool _inFlight;
-
-    public ParticleSystem ExplosionEffectPrefab => _explosionEffectPrefab;
-    public bool IsInFlight => _inFlight;
-
-    public float CollisionRadius
-    {
-        get
-        {
-            SphereCollider sphere = GetComponent<SphereCollider>();
-            Vector3 scale = transform.lossyScale;
-
-            return sphere.radius * Mathf.Max(
-                Mathf.Abs(scale.x),
-                Mathf.Max(Mathf.Abs(scale.y), Mathf.Abs(scale.z)));
-        }
-    }
-
-    internal void Initialize(BombPool pool)
-    {
-        _pool = pool;
-        _body = GetComponent<Rigidbody>();
-        _colliders = GetComponentsInChildren<Collider>(true);
-    }
-
-    internal void Launch(
-        Vector3 position,
-        Quaternion rotation,
-        Vector3 impulse,
-        Collider[] owner)
-    {
-        transform.SetPositionAndRotation(position, rotation);
-
-        _ownerColliders = owner;
-        _lifeRemaining = Mathf.Max(0.1f, _maxFlightTime);
-        _inFlight = true;
-
-        gameObject.SetActive(true);
-
-        _body.isKinematic = false;
-        _body.useGravity = true;
-        _body.linearVelocity = Vector3.zero;
-        _body.angularVelocity = Vector3.zero;
-
-        SetOwnerCollisionIgnored(true);
-
-        _body.WakeUp();
-        _body.AddForce(impulse, ForceMode.Impulse);
-    }
-
-    private void Update()
-    {
-        if (_inFlight == false)
-        {
-            return;
-        }
-
-        _lifeRemaining -= Time.deltaTime;
-
-        // 충돌할 바닥이 없어도 일정 시간이 지나면 회수한다.
-        if (_lifeRemaining <= 0f || transform.position.y < -1000f)
-        {
-            _pool.Return(this);
-        }
-    }
-
+    // 다른 콜라이더와 부딛힌 순간 실행되는 메서드
     private void OnCollisionEnter(Collision collision)
     {
-        if (_inFlight == false || _pool == null)
-        {
-            return;
-        }
+        ParticleSystem effect = Instantiate(_explosionEffectPrefab, transform.position, Quaternion.identity);
+        effect.Play();
 
-        if (_ownerColliders != null)
-        {
-            for (int i = 0; i < _ownerColliders.Length; i++)
-            {
-                if (_ownerColliders[i] == collision.collider)
-                {
-                    return;
-                }
-            }
-        }
+        ApplyAreaDamage();
 
-        Vector3 position = transform.position;
-        Quaternion rotation = Quaternion.identity;
-
-        if (collision.contactCount > 0)
-        {
-            ContactPoint contact = collision.GetContact(0);
-
-            position = contact.point + contact.normal * 0.03f;
-            rotation = Quaternion.LookRotation(contact.normal);
-        }
-
-        _pool.Explode(this, position, rotation);
+        // Todo. 오브젝트 풀링 적용
+        // 폭탄을 삭제한다.
+        Destroy(gameObject);
     }
 
-    internal void Deactivate()
+    private void ApplyAreaDamage()
     {
-        _inFlight = false;
-        _lifeRemaining = 0f;
+        // 0. 주위에 있는 드럼통들을 모두 찾는다.
+        // Physics.OverlapSpere(원점, 반지름, 찾을 레이어들)
+        Collider[] colliders =
+            Physics.OverlapSphere(transform.position, _explosionRange, LayerMask.GetMask("Drum", "Zombie"));
 
-        _body.linearVelocity = Vector3.zero;
-        _body.angularVelocity = Vector3.zero;
-
-        SetOwnerCollisionIgnored(false);
-        _ownerColliders = null;
-
-        _body.Sleep();
-        gameObject.SetActive(false);
-    }
-
-    private void SetOwnerCollisionIgnored(bool ignored)
-    {
-        if (_ownerColliders == null)
+        // 1. 드럼통과 좀비들에게 대미지를 준다.
+        foreach (Collider col in colliders)
         {
-            return;
-        }
-
-        for (int i = 0; i < _colliders.Length; i++)
-        {
-            if (_colliders[i] == null)
+            DamageInfo damageInfo = new()
             {
-                continue;
-            }
+                Value = _damage,
+                HitPoint = col.ClosestPoint(transform.position), // 폭발 중심에서 가장 가까운 콜라이더 표면 위치
+                HitNormal = (transform.position - col.ClosestPoint(transform.position)).normalized
+            };
 
-            for (int j = 0; j < _ownerColliders.Length; j++)
-            {
-                if (_ownerColliders[j] != null)
-                {
-                    Physics.IgnoreCollision(
-                        _colliders[i],
-                        _ownerColliders[j],
-                        ignored);
-                }
-            }
-        }
-    }
 
-    private void OnDisable()
-    {
-        // 외부에서 비활성화해도 풀로 반납한다.
-        if (_inFlight && _pool != null)
-        {
-            _pool.Return(this);
+            col.GetComponent<IDamageable>()?.TakeDamage(damageInfo);
         }
     }
 }
