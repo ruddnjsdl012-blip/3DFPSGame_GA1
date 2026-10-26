@@ -34,7 +34,8 @@ public class PlayerBombHud : MonoBehaviour
         }
 
         float x = Mathf.Max(12f, Screen.width - 292f);
-        float y = Mathf.Max(12f, Screen.height - 112f);
+        // 우측 하단은 탄약 HUD(UI_AmmoHud, 높이 104 + 여백 20)가 쓰므로 그 위에 둔다.
+        float y = Mathf.Max(12f, Screen.height - 226f);
 
         Color original = GUI.color;
 
