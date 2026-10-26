@@ -131,7 +131,7 @@ namespace FreeModelsImportFixed20261026.Editor
                 AssetDatabase.SaveAssets();
                 Debug.Log(string.Format(
                     "[Free Models] 외형 적용 완료: Player {0}, Zombie {1}, Drum {2}, Box {3}. " +
-                    "서 있는 캐릭터/1인칭 총/총구화염/좀비 피/미니맵 줌을 적용했습니다. Ctrl+S로 저장하세요. Ctrl+Z로 되돌릴 수 있습니다.",
+                    "서 있는 캐릭터/1인칭 총/총구화염/좀비 피/미니맵 줌/재장전 모션을 적용했습니다. Ctrl+S로 저장하세요. Ctrl+Z로 되돌릴 수 있습니다.",
                     players, zombies, drums, boxes));
                 Transform map = originalObjects.Find(t => t != null && t.name == "Map");
                 if (map != null && SceneView.lastActiveSceneView != null)

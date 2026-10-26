@@ -46,7 +46,7 @@ namespace FreeModelsImportFixed20261026.Editor
                 AssetDatabase.SaveAssets();
                 EditorSceneManager.MarkSceneDirty(scene);
                 Undo.CollapseUndoOperations(group);
-                Debug.Log("[Free Models V6] 총구화염/피격 피/미니맵 줌 연결 완료. Ctrl+S로 저장하세요. 왼쪽 Alt: 커서 표시, 오른쪽 Alt: FPS 복귀.");
+                Debug.Log("[Free Models V7] 총구화염/피격 피/미니맵 줌/재장전 모션 연결 완료. Ctrl+S로 저장하세요. 왼쪽 Alt: 커서 표시, 오른쪽 Alt: FPS 복귀.");
             }
             catch { Undo.RevertAllDownToGroup(group); throw; }
         }
@@ -73,6 +73,7 @@ namespace FreeModelsImportFixed20261026.Editor
             }
             if (players == 0) Debug.LogWarning("[Free Models V6] 씬에 PlayerGunFire가 없습니다. 기존 발사 컴포넌트를 확인하세요.");
             if (connectMinimap) ConnectMinimap(scene);
+            FreeModelsReloadSetup.ApplyToScene(scene);
             Debug.Log("[Free Models V6] 실제 Shoot 호출에 연결한 총 " + players + "개, 피 이펙트를 연결한 좀비 " + zombies + "개.");
         }
 

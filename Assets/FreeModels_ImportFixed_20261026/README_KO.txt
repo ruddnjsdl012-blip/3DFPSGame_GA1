@@ -1,88 +1,81 @@
-무료 모델 V6: 총구화염 · 좀비 피 · 미니맵 +/- 줌
-대상: Unity 6.3 / 기존 GameScene / V5 위에 덮어쓰기
+무료 모델 V7: 1인칭 탄창 교체 재장전 모션
+Unity 6.3 / 기존 V6 위에 전체 Import
 
 적용 방법
 1. Play를 종료합니다.
-2. FreeModels_Combat_Minimap_V6.unitypackage를 전체 Import합니다.
-   Assets/02.Scripts의 수정 파일 4개도 포함해서 Import해야 합니다.
+2. FreeModels_Reload_V7.unitypackage를 전체 Import합니다.
+   Assets/02.Scripts/Player/PlayerGunFire.cs도 포함해야 합니다.
 3. 컴파일이 끝나면 기존 GameScene을 엽니다.
-4. Tools > Free Models Fixed > Apply Combat FX and Minimap 을 실행합니다.
-5. Ctrl+S로 씬을 저장하고 Game 탭에서 Play합니다.
-   V5 총 모델이 아직 없는 씬에서는 이 메뉴가 모델 적용까지 진행합니다.
+4. Tools > Free Models Fixed > Apply Reload Motion 을 누릅니다.
+5. Ctrl+S로 씬을 저장하고 Game에서 Play한 뒤 R키를 누릅니다.
+   1인칭 모델이 없는 씬에서는 기존 모델/총구화염/피/미니맵 적용도 진행합니다.
 
-조작 확인
-- 왼쪽 마우스 연사: 실제 발사 간격마다 총구화염 + 작은 불꽃/연기 + 짧은 따뜻한 조명.
-- 좀비 피격: 실제 대미지를 받은 위치/표면 방향으로 붉은 피가 튑니다.
-- 좀비를 죽이는 마지막 타격에도 피가 나오며, 좀비 이동/삭제와 독립적으로 사라집니다.
-- 기존 CursorManager 조작은 왼쪽 Alt = 커서 표시, 오른쪽 Alt = 커서 잠금입니다.
-- 왼쪽 Alt로 커서를 보이게 한 뒤 미니맵 + / - 버튼을 클릭합니다.
-- +는 확대(orthographicSize 감소), -는 축소(orthographicSize 증가)입니다.
-- 기본 줌 범위는 2~40, 클릭당 2이며 범위 끝에서는 해당 버튼이 비활성화됩니다.
-- 기존 키보드 0 = 확대, 9 = 축소도 같은 함수를 사용합니다.
-- 일시 정지 중에도 미니맵 버튼을 사용할 수 있습니다.
+추가한 모션
+- 총을 안쪽으로 기울입니다.
+- 왼손으로 탄창을 잡아 아래로 빼냅니다.
+- 화면 아래에서 새 탄창을 가져와 다시 끼웁니다.
+- 왼손을 리시버 쪽으로 옮기는 짧은 동작 후 조준 자세로 돌아옵니다.
+- 오른손은 총과 함께 움직여 방아쇠 쪽을 계속 잡고 있습니다.
+- 라이플, SMG, 권총 외형을 모두 지원합니다.
+- R키 재장전이 실제로 시작될 때만 모션을 재생합니다.
 
-자동 연결
-- 기존 1인칭 총의 메시 끝에서 총구 위치를 계산해 __FreeModels_MuzzleFX를 붙입니다.
-- PlayerGunFire의 실제 Shoot 호출에만 효과를 연결합니다. 별도 입력 감지로 중복 발사하지 않습니다.
-- 모든 씬 Zombie의 Blood Spray Prefab에 생성한 BloodHit.prefab을 연결합니다.
-- 미니맵 Camera/RawImage/UI_Minimap과 기존 +/- 버튼을 찾아 연결합니다.
-- TMP 또는 기존 Text의 +, ＋, -, − 표기와 ZoomIn/ZoomOut/Plus/Minus 이름을 인식합니다.
-- 버튼이 없을 때만 미니맵 아래에 작은 +/- 버튼을 만듭니다.
-- 필요한 Canvas GraphicRaycaster와 EventSystem이 없는 경우 추가합니다.
-- 다른 버튼 이벤트를 지우지 않으며, 다시 활성화해도 자체 이벤트가 중복되지 않게 처리합니다.
-- 같은 메뉴를 반복 실행하면 이 도구가 만든 총구 이펙트를 교체합니다.
-- Inspector에서 직렬화된 연결이 실제로 저장됐는지도 적용 중 확인합니다.
+탄약/시간 동기화
+- 기존 PlayerGunFire의 Reloading Time 값을 사용합니다. 기본값은 3초입니다.
+- 재장전 시간 전체를 마친 뒤에만 기존 Max Bullet Count로 탄약을 채웁니다.
+- 재장전 중 발사하면 기존 동작대로 재장전을 취소합니다.
+- 발사 직전에 총/팔/탄창을 조준 자세로 돌려놓아 총구화염 위치가 어긋나지 않게 했습니다.
+- 취소된 재장전으로 탄약이 보충되지는 않습니다.
+- 기존 연사 간격/사거리/공격력/탄약 수/재장전 시간 설정은 유지합니다.
+- 이미 재장전 중이면 R을 다시 눌러도 중복 시작하지 않습니다.
+- Time.deltaTime을 사용하므로 일시 정지하면 모션과 재장전 시간이 함께 멈춥니다.
+- 비활성화/취소/완료 시 원래 로컬 위치/회전/크기와 탄창 표시 상태를 복원합니다.
+- 재장전 완료/취소를 반복해도 위치 오프셋이 누적되지 않게 기준 자세에서 계산합니다.
 
-이펙트
-- 노란색/주황색 총구화염은 짧은 스타 모양 빌보드와 소량의 불꽃/연기로 구성됩니다.
-- 좀비 피는 붉은 안개와 작은 피 방울 파티클입니다. 바닥에 영구 데칼을 남기지 않습니다.
-- 피는 World 공간에서 움직이며 약 1.3초 후 자동 삭제됩니다.
-- 파티클과 정리 시간에 unscaled time을 사용하여 승리 화면이 timeScale=0으로 멈춰도 끝납니다.
-- 총구의 조명도 unscaled time으로 약 0.045초 후 꺼집니다.
-- VFX에는 추가 충돌체나 데미지 처리가 없습니다.
-- URP에서는 URP/Particles/Unlit, Built-in에서는 Particles/Standard Unlit 재질을 생성합니다.
-- 효과용 알파 텍스처 2개는 수학적 마스크로 생성했으며 코드에도 내장했습니다.
-- 기존 7종 모델 텍스처 복구와 서 있는 캐릭터/총/팔 모델은 유지합니다.
+모델 구성
+- 기존 Kenney 무기와 팔의 텍스처/메시를 사용합니다.
+- 라이플/SMG의 실제 탄창 메시를 본체에서 분리해 독립적으로 움직입니다.
+- 권총은 기존 그립 안에 들어가는 내부 탄창 메시를 기존 그립 형상에서 파생했습니다.
+- 팔은 원본 생존자 에셋의 좌/우 팔로 나눴고, 시작 자세는 기존 V6와 같습니다.
+- 새 모션은 정적 모델 부품을 움직이는 절차적 애니메이션입니다.
+- 별도 Animator Controller, 유료 애니메이션, 외부 플러그인은 필요하지 않습니다.
+- 손가락 뼈 애니메이션이나 재장전 효과음은 포함하지 않습니다.
+- 실제 탄창/왼팔/오른팔은 Hierarchy의 __FreeModels_Magazine / __FreeModels_ReloadLeft / __FreeModels_ReloadRight에서 확인할 수 있습니다.
+- 기존 합쳐진 팔 모델은 보관하되 해당 MeshRenderer를 숨깁니다.
+- MainCamera > __FreeModels_FirstPerson의 FreeModelsReloadMotion에서 총 기울기/이동량을 조정할 수 있습니다.
 
-수정한 기존 파일 (원래 경로/GUID 유지)
-Assets/02.Scripts/Player/PlayerGunFire.cs
-  실제 발사 시 총구화염을 호출하고, 좀비 피와 일반 표면 피격 효과가 중첩되지 않게 분기합니다.
-  기존 Hit Effect Prefab이 비어 있어도 대미지 처리가 예외로 중단되지 않게 했습니다.
-Assets/02.Scripts/Monster/Zombie.cs
-  기존 피 효과 호출을 생존/사망 분기 앞쪽으로 옮기고 World 좌표로 생성합니다.
-Assets/02.Scripts/Camera/MinimapCamera.cs
-  기존 Target/Height/추적 동작을 유지하고 제한된 ZoomIn/ZoomOut 함수를 추가했습니다.
-Assets/02.Scripts/UI/UI_Minimap.cs
-  기존에 비어 있던 미니맵 버튼 연결/클릭 처리를 구현했습니다.
+기존 V6 기능
+- 실제 발사 시점의 총구화염, 소량의 불꽃/연기, 짧은 조명.
+- 좀비 피격 지점의 피 분사와 치명타 피 효과.
+- 기존 미니맵 +/− 버튼 확대/축소, 범위 제한 2~40과 버튼 비활성화.
+- 왼쪽 Alt로 커서 표시 후 버튼 클릭, 오른쪽 Alt로 FPS 조작 복귀.
+- 기존 좀비 상태 전이/승리 알림, 이동과 카메라 조작은 유지합니다.
 
-유지한 내용
-- Player 이동, 카메라 회전, 기존 조준 Raycast, 공격력/사거리/연사 간격/탄약/재장전 스탯.
-- Zombie 추격/공격/Hit/Death 상태와 GameManager의 처치/승리 알림.
-- CursorManager, Canvas의 기존 배치, 다른 HUD/버튼 기능.
-- 기존 V5의 에셋 경로/GUID 52개와 원래 모델/메시/텍스처 데이터.
-- 실제 탄환 오브젝트나 새 데미지 시스템은 추가하지 않습니다.
-
-기존 모델 메뉴
+기존 메뉴와 재적용
+Tools > Free Models Fixed > Apply Combat FX and Minimap
+  V6 기능과 함께 재장전 모션도 연결합니다.
 Tools > Free Models Fixed > Apply Models to Current Scene
-  서 있는 캐릭터/총/배경과 함께 V6의 이펙트/미니맵도 적용합니다.
+  서 있는 캐릭터/총/배경 및 V6/V7 기능을 적용합니다.
 Tools > Free Models Fixed > First Person Weapon > Rifle / SMG / Pistol
-  총 외형을 바꾸고 새 총에 총구화염도 다시 연결합니다.
-Tools > Free Models Fixed > Build Model Prefabs Only
-  V5의 29개 모델 프리팹만 생성합니다.
+  외형을 바꾼 새 총에 총구화염과 재장전 모션을 다시 연결합니다.
+Tools > Free Models Fixed > Apply Reload Motion
+  기존 배치를 유지하며 재장전 부품/연결만 갱신합니다.
 
-되돌리기
-- 적용 직후 Ctrl+Z로 씬 연결/추가 오브젝트를 되돌릴 수 있습니다.
-- 업로드 원본은 스크립트 66개만 포함했고 씬/기존 프리팹은 포함하지 않았으므로,
-  사용자가 열고 있는 씬에 메뉴로 연결하는 방식입니다.
-- 스폰용 Zombie 프리팹 원본은 자동 수정하지 않습니다. 현재 프로젝트는 씬의 좀비를 사용합니다.
+원본/호환성
+- 기존 V6 파일 61개의 경로와 GUID를 모두 유지합니다.
+- V6의 원래 게임 스크립트 4개 중 PlayerGunFire에만 재장전 모션 호출/동기화를 추가했습니다.
+- Zombie, MinimapCamera, UI_Minimap의 V6 동작과 소스는 그대로입니다.
+- 기존 V5/V6 원본 OBJ/FBX/PNG와 모델 카탈로그/기본 메시 데이터도 유지합니다.
+- 추가 충돌체, 새 대미지 처리, 카메라 이동/회전 코드는 넣지 않습니다.
+- 현재 씬에서 적용하며, 원래 스폰용 프리팹 에셋은 자동 수정하지 않습니다.
+- 적용 직후 Ctrl+Z로 씬 변경을 되돌릴 수 있습니다.
 
-검증 범위
-- 코드 구문, GUID/압축 형식, 기존 모델 보존, 텍스처 데이터와 이벤트 호출/연결 구조를 확인했습니다.
-- 이 환경에는 Unity Editor가 없어 실제 Unity Import/Play 검증은 수행하지 못했습니다.
+검증
+- 탄창/총 본체 분리, 양손 분리, 메시/법선/UV/삼각형 인덱스를 확인했습니다.
+- 조준 자세 → 탄창 제거 → 재삽입 → 복귀를 메시 렌더링으로 확인했습니다.
+- 코드 구문, 재장전 완료/취소/일시 정지 동기화 구조, GUID와 압축 형식을 검사했습니다.
+- Unity Editor가 없는 환경이므로 실제 Unity Import/Play 검증은 수행하지 못했습니다.
 
-모델 에셋 출처: Kenney / CC0
-https://kenney.nl/assets/city-kit-industrial
-https://kenney.nl/assets/survival-kit
-https://kenney.nl/assets/animated-characters-survivors
-https://kenney.nl/assets/blaster-kit
+에셋 출처 / CC0
+Kenney City Kit Industrial / Survival Kit / Animated Characters Survivors / Blaster Kit
 원본 라이선스와 다운로드 해시는 Licenses 폴더에 있습니다.
+V6 이펙트용 마스크는 절차적으로 생성했습니다.

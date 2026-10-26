@@ -6,6 +6,7 @@ public class PlayerGunFire : MonoBehaviour
 {
     [SerializeField] private ParticleSystem _hitEffectPrefab;
     [SerializeField] private FreeModelsMuzzleFlash _muzzleFlash;
+    [SerializeField] private FreeModelsReloadMotion _reloadMotion;
 
     [Header("스탯")]
     [SerializeField] private int _maxBulletCount = 30;
@@ -35,20 +36,13 @@ public class PlayerGunFire : MonoBehaviour
         bool isMouseVisible = Cursor.visible;
         if (!isMouseVisible && Input.GetButton("Fire1") && _fireTimer <= 0f)
         {
+            // Restore the aim pose before the shot so its flash is at the barrel.
+            CancelReload(true);
             _bulletCount--;
             _fireTimer = _fireInterval;
 
             Shoot();
 
-            // 발사하면 진행 중인 재장전을 취소한다.
-            if (_reloadCoroutine != null)
-            {
-                StopCoroutine(_reloadCoroutine);
-
-                Debug.Log("재장전 취소!");
-
-                _reloadCoroutine = null;
-            }
         }
 
         // 중복 재장전을 방지한다.
@@ -62,15 +56,36 @@ public class PlayerGunFire : MonoBehaviour
     private IEnumerator Reloading_Coroutine()
     {
         Debug.Log("재장전 시작!");
-
-        yield return new WaitForSeconds(_reloadingTime);
+        if (_reloadMotion == null && Camera.main != null)
+            _reloadMotion = Camera.main.GetComponentInChildren<FreeModelsReloadMotion>(true);
+        if (_reloadMotion != null) _reloadMotion.BeginReload();
+        float duration = Mathf.Max(0.05f, _reloadingTime);
+        float elapsed = 0f;
+        while (elapsed < duration)
+        {
+            if (_reloadMotion != null) _reloadMotion.SetProgress(elapsed / duration);
+            yield return null;
+            elapsed += Time.deltaTime;
+        }
 
         _bulletCount = _maxBulletCount;
+        if (_reloadMotion != null) _reloadMotion.CompleteReload();
 
         Debug.Log("재장전 완료!");
 
         _reloadCoroutine = null;
     }
+
+    private void CancelReload(bool notify)
+    {
+        bool wasReloading = _reloadCoroutine != null;
+        if (wasReloading) StopCoroutine(_reloadCoroutine);
+        _reloadCoroutine = null;
+        if (_reloadMotion != null && (wasReloading || _reloadMotion.IsReloading)) _reloadMotion.CancelReload();
+        if (wasReloading && notify) Debug.Log("재장전 취소!");
+    }
+
+    private void OnDisable() { CancelReload(false); }
 
     private void Shoot()
     {

@@ -24,7 +24,8 @@
       "sha256": "91e3093e95427d59625e7e2ce2d0399b861600160fd0b4ada7714796b67cea8c"
     }
   ],
-  "scope": "V6: existing model visuals plus muzzle flash, blood and minimap zoom; four original scripts receive targeted hooks/UI methods while their GUIDs are preserved. Movement, damage values, firing stats and zombie FSM remain unchanged.",
+  "scope": "V7 adds timer-synchronized procedural magazine reload motion to V6. Original V6 asset identities and gameplay settings are preserved. Only PlayerGunFire gains reload animation integration; the V6 Zombie and minimap scripts are unchanged.",
   "derived_meshes": "Character standing poses, cropped/reposed FPS forearms, and gun axis conversion are baked offline. Original FBX is retained.",
-  "effects": "Two procedural alpha particle masks generated for this project. No external VFX textures or plugins required."
+  "effects": "Two procedural alpha particle masks generated for this project. No external VFX textures or plugins required.",
+  "reload_derivatives": "Magazine/body meshes are split from the existing Kenney FPS weapons. Pistol internal magazine is derived from the source grip geometry. Left/right arm meshes are split from the existing survivor FPS arms; seated poses retain the original geometry."
 }
