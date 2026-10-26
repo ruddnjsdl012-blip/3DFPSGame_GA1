@@ -16,6 +16,7 @@ namespace FreeModelsImportFixed20261026.Editor
         private const string Root = "Assets/FreeModels_ImportFixed_20261026";
         private const string VisualName = "__FreeModels_Visual";
         private const string BackgroundName = "FreeModels_Background";
+        private const string FirstPersonName = "__FreeModels_FirstPerson";
 
         [Serializable] private sealed class Catalog { public Entry[] models; }
         [Serializable] private sealed class Entry
@@ -25,6 +26,8 @@ namespace FreeModelsImportFixed20261026.Editor
             public string texture;
             public float height = 1f;
             public float rotationY;
+            public string meshData;
+            public bool preserveOrigin;
         }
 
         [MenuItem("Tools/Free Models Fixed/Apply Models to Current Scene")]
@@ -42,6 +45,7 @@ namespace FreeModelsImportFixed20261026.Editor
             // Load and validate everything before touching the user's scene.
             Dictionary<string, GameObject> prefabs = BuildLibrary();
             List<Transform> originalObjects = GetSceneTransforms(scene);
+            Camera viewCamera = FindGameplayCamera(scene, originalObjects);
             Bounds arena = GetArenaBounds(originalObjects);
             float floorY = GetFloorY(originalObjects, arena);
 
@@ -55,7 +59,7 @@ namespace FreeModelsImportFixed20261026.Editor
             {
                 foreach (Transform target in originalObjects)
                 {
-                    if (IsGenerated(target) || target.Find(VisualName) != null) continue;
+                    if (target == null || IsGenerated(target)) continue;
                     string kind = GetTargetKind(target.gameObject);
                     string id = null;
                     if (kind == "Zombie") id = zombies % 2 == 0 ? "zombie_a" : "zombie_b";
@@ -63,6 +67,11 @@ namespace FreeModelsImportFixed20261026.Editor
                     else if (kind == "Drum") id = "barrel";
                     else if (kind == "Box") id = "crate";
                     if (id == null) continue;
+
+                    // Refresh our existing child as well: V3/V4 instances may already have
+                    // a cached horizontal FBX pose. Leave the gameplay object untouched.
+                    Transform previous = target.Find(VisualName);
+                    if (previous != null) Undo.DestroyObjectImmediate(previous.gameObject);
 
                     Bounds slot = GetLocalSlot(target.gameObject, kind);
                     GameObject visual = (GameObject)PrefabUtility.InstantiatePrefab(prefabs[id], target);
@@ -81,6 +90,13 @@ namespace FreeModelsImportFixed20261026.Editor
                     visual.transform.localScale = fit;
                     visual.transform.localPosition = slot.center - Vector3.Scale(modelBounds.center, fit);
                     SetLayerRecursively(visual.transform, target.gameObject.layer);
+                    if (kind == "Player" && viewCamera != null)
+                    {
+                        // Avoid drawing the local player's head around the FPS camera.
+                        // The full standing survivor remains available as a model prefab.
+                        foreach (Renderer renderer in visual.GetComponentsInChildren<Renderer>(true))
+                            renderer.shadowCastingMode = ShadowCastingMode.ShadowsOnly;
+                    }
 
                     // Only replace the root primitive body. Never disable particles, UI, or other children.
                     MeshRenderer oldBody = target.GetComponent<MeshRenderer>();
@@ -100,21 +116,23 @@ namespace FreeModelsImportFixed20261026.Editor
                 Material wallMaterial = GetMaterial("Wall_Concrete", null, new Color(0.43f, 0.46f, 0.46f));
                 foreach (Transform target in originalObjects)
                 {
-                    if (IsGenerated(target)) continue;
+                    if (target == null || IsGenerated(target)) continue;
                     if (target.name == "Ground") RecolorPrimitive(target, groundMaterial);
                     else if (HasAncestorNamed(target, "Map") && GetTargetKind(target.gameObject) == null)
                         RecolorPrimitive(target, wallMaterial);
                 }
 
-                bool addedBackground = !originalObjects.Exists(t => t.name == BackgroundName);
+                bool addedBackground = !originalObjects.Exists(t => t != null && t.name == BackgroundName);
                 if (addedBackground) AddBackground(scene, prefabs, arena, floorY);
+                if (viewCamera != null) ApplyFirstPersonModel(viewCamera, prefabs, "fps_rifle");
+                else Debug.LogWarning("[Free Models] 게임용 Camera를 찾지 못했습니다. MainCamera 태그를 확인하고 메뉴를 다시 실행하세요.");
                 EditorSceneManager.MarkSceneDirty(scene);
                 AssetDatabase.SaveAssets();
                 Debug.Log(string.Format(
                     "[Free Models] 외형 적용 완료: Player {0}, Zombie {1}, Drum {2}, Box {3}. " +
-                    "기존 스크립트/충돌체/카메라/UI 설정은 유지했습니다. Ctrl+S로 씬을 저장하세요. Ctrl+Z로 되돌릴 수 있습니다.",
+                    "캐릭터를 세우고 1인칭 총/팔 외형을 적용했습니다. 이동/발사/대미지/UI 코드는 유지했습니다. Ctrl+S로 저장하세요. Ctrl+Z로 되돌릴 수 있습니다.",
                     players, zombies, drums, boxes));
-                Transform map = originalObjects.Find(t => t.name == "Map");
+                Transform map = originalObjects.Find(t => t != null && t.name == "Map");
                 if (map != null && SceneView.lastActiveSceneView != null)
                 {
                     Selection.activeGameObject = map.gameObject;
@@ -130,6 +148,38 @@ namespace FreeModelsImportFixed20261026.Editor
             finally { if (completed) Undo.CollapseUndoOperations(undoGroup); }
         }
 
+        [MenuItem("Tools/Free Models Fixed/First Person Weapon/Rifle")]
+        public static void UseRifle() { ApplyWeaponOnly("fps_rifle"); }
+
+        [MenuItem("Tools/Free Models Fixed/First Person Weapon/SMG")]
+        public static void UseSmg() { ApplyWeaponOnly("fps_smg"); }
+
+        [MenuItem("Tools/Free Models Fixed/First Person Weapon/Pistol")]
+        public static void UsePistol() { ApplyWeaponOnly("fps_pistol"); }
+
+        private static void ApplyWeaponOnly(string id)
+        {
+            if (!CanEdit()) return;
+            if (PrefabStageUtility.GetCurrentPrefabStage() != null) return;
+            Scene scene = SceneManager.GetActiveScene();
+            if (!scene.IsValid() || !scene.isLoaded) return;
+            Camera camera = FindGameplayCamera(scene, GetSceneTransforms(scene));
+            if (camera == null) { Debug.LogWarning("[Free Models] MainCamera를 찾지 못했습니다."); return; }
+            Dictionary<string, GameObject> prefabs = BuildLibrary();
+            Undo.IncrementCurrentGroup();
+            int group = Undo.GetCurrentGroup();
+            Undo.SetCurrentGroupName("Set first person weapon model");
+            try
+            {
+                ApplyFirstPersonModel(camera, prefabs, id);
+                EditorSceneManager.MarkSceneDirty(scene);
+                AssetDatabase.SaveAssets();
+                Undo.CollapseUndoOperations(group);
+                Debug.Log("[Free Models] 1인칭 외형 변경: " + id + ". 발사 기능과 스탯은 기존 설정을 사용합니다. Ctrl+S로 저장하세요.");
+            }
+            catch { Undo.RevertAllDownToGroup(group); throw; }
+        }
+
         [MenuItem("Tools/Free Models Fixed/Build Model Prefabs Only")]
         public static void BuildPrefabsOnly()
         {
@@ -139,6 +189,98 @@ namespace FreeModelsImportFixed20261026.Editor
             Selection.activeObject = AssetDatabase.LoadAssetAtPath<DefaultAsset>(Root + "/Prefabs");
             EditorGUIUtility.PingObject(Selection.activeObject);
             Debug.Log("[Free Models] 모델 프리팹 " + prefabs.Count + "개를 준비했습니다. Prefabs 폴더에서 씬으로 드래그할 수 있습니다.");
+        }
+
+        private static Camera FindGameplayCamera(Scene scene, List<Transform> objects)
+        {
+            Camera main = Camera.main;
+            if (main != null && main.gameObject.scene == scene && !main.orthographic) return main;
+            Camera childCamera = null;
+            Camera fallback = null;
+            foreach (Transform target in objects)
+            {
+                if (target == null || IsGenerated(target)) continue;
+                Camera camera = target.GetComponent<Camera>();
+                if (camera == null || camera.orthographic || camera.cameraType != CameraType.Game) continue;
+                if (camera.CompareTag("MainCamera")) return camera;
+                if (camera.isActiveAndEnabled && fallback == null) fallback = camera;
+                for (Transform parent = camera.transform.parent; parent != null; parent = parent.parent)
+                    if (GetTargetKind(parent.gameObject) == "Player") { childCamera = camera; break; }
+            }
+            return childCamera != null ? childCamera : fallback;
+        }
+
+        private static void ApplyFirstPersonModel(Camera camera, Dictionary<string, GameObject> prefabs, string id)
+        {
+            Transform old = camera.transform.Find(FirstPersonName);
+            if (old != null) Undo.DestroyObjectImmediate(old.gameObject);
+            GameObject root = new GameObject(FirstPersonName);
+            SceneManager.MoveGameObjectToScene(root, camera.gameObject.scene);
+            Undo.RegisterCreatedObjectUndo(root, "Attach first person gun and arms");
+            root.transform.SetParent(camera.transform, false);
+            root.transform.localPosition = new Vector3(0f, -0.01f, 0.12f);
+            Vector3 cameraScale = camera.transform.lossyScale;
+            root.transform.localScale = new Vector3(
+                1f / Mathf.Max(Mathf.Abs(cameraScale.x), 0.0001f),
+                1f / Mathf.Max(Mathf.Abs(cameraScale.y), 0.0001f),
+                1f / Mathf.Max(Mathf.Abs(cameraScale.z), 0.0001f));
+
+            // Both meshes have authored Unity coordinates; their +Z barrel direction is
+            // the existing camera's forward. Parenting handles the existing look controls.
+            GameObject gun = (GameObject)PrefabUtility.InstantiatePrefab(prefabs[id], root.transform);
+            Undo.RegisterCreatedObjectUndo(gun, "Add gun model");
+            gun.name = id;
+            gun.transform.localPosition = new Vector3(0.225f, -0.18f, 0.59f);
+            gun.transform.localRotation = Quaternion.identity;
+            gun.transform.localScale = Vector3.one;
+
+            GameObject arms = (GameObject)PrefabUtility.InstantiatePrefab(prefabs["fps_arms"], root.transform);
+            Undo.RegisterCreatedObjectUndo(arms, "Add first person arms");
+            arms.name = "FPS_Arms";
+            arms.transform.localPosition = Vector3.zero;
+            arms.transform.localRotation = Quaternion.identity;
+            arms.transform.localScale = Vector3.one;
+            if (id == "fps_smg") arms.transform.localPosition = new Vector3(0f, 0f, -0.025f);
+            else if (id == "fps_pistol")
+            {
+                arms.transform.localScale = new Vector3(1f, 1f, 0.78f);
+                arms.transform.localPosition = new Vector3(0f, 0f, 0.09f);
+            }
+
+            int layer = 2; // Ignore Raycast; no colliders are added in any case.
+            if ((camera.cullingMask & (1 << layer)) == 0)
+            {
+                layer = -1;
+                for (int candidate = 0; candidate < 32; candidate++)
+                    if ((camera.cullingMask & (1 << candidate)) != 0) { layer = candidate; break; }
+                if (layer < 0) throw new InvalidOperationException("MainCamera의 Culling Mask가 Nothing입니다. 렌더링할 레이어를 활성화하세요.");
+            }
+            SetLayerRecursively(root.transform, layer);
+            foreach (Renderer renderer in root.GetComponentsInChildren<Renderer>(true))
+            {
+                renderer.shadowCastingMode = ShadowCastingMode.Off;
+                renderer.receiveShadows = false;
+                renderer.motionVectorGenerationMode = MotionVectorGenerationMode.ForceNoMotion;
+            }
+            if (camera.nearClipPlane > 0.03f)
+            {
+                Undo.RecordObject(camera, "Set first person near clipping plane");
+                camera.nearClipPlane = 0.03f;
+                PrefabUtility.RecordPrefabInstancePropertyModifications(camera);
+            }
+            foreach (Transform target in GetSceneTransforms(camera.gameObject.scene))
+            {
+                if (target == null || IsGenerated(target) || GetTargetKind(target.gameObject) != "Player") continue;
+                Transform body = target.Find(VisualName);
+                if (body == null) continue;
+                foreach (Renderer renderer in body.GetComponentsInChildren<Renderer>(true))
+                {
+                    Undo.RecordObject(renderer, "Hide local player body in first person");
+                    renderer.shadowCastingMode = ShadowCastingMode.ShadowsOnly;
+                    PrefabUtility.RecordPrefabInstancePropertyModifications(renderer);
+                }
+            }
+            Debug.Log("[Free Models] 1인칭 총/팔을 " + camera.name + " 아래에 배치했습니다. Game 탭에서 확인하세요.");
         }
 
         private static bool CanEdit()
@@ -160,6 +302,12 @@ namespace FreeModelsImportFixed20261026.Editor
 
             foreach (Entry entry in catalog.models)
             {
+                if (!string.IsNullOrEmpty(entry.meshData))
+                {
+                    FreeModelsBakedMeshes.Load(entry.meshData);
+                    FreeModelsTextureRecovery.Load(entry.texture);
+                    continue;
+                }
                 if (AssetDatabase.LoadAssetAtPath<GameObject>(Root + "/" + entry.path) == null)
                 {
                     AssetDatabase.ImportAsset(Root + "/" + entry.path, ImportAssetOptions.ForceUpdate | ImportAssetOptions.ForceSynchronousImport);
@@ -177,14 +325,24 @@ namespace FreeModelsImportFixed20261026.Editor
                 string prefabPath = Root + "/Prefabs/" + entry.id + ".prefab";
                 Material material = GetMaterial(Path.GetFileNameWithoutExtension(entry.texture), entry.texture, Color.white);
                 GameObject existing = AssetDatabase.LoadAssetAtPath<GameObject>(prefabPath);
-                if (existing != null) { result.Add(entry.id, existing); continue; }
+                if (existing != null && string.IsNullOrEmpty(entry.meshData)) { result.Add(entry.id, existing); continue; }
                 GameObject wrapper = new GameObject(entry.id);
                 try
                 {
-                    GameObject source = AssetDatabase.LoadAssetAtPath<GameObject>(Root + "/" + entry.path);
-                    GameObject model = (GameObject)PrefabUtility.InstantiatePrefab(source, wrapper.transform);
-                    PrefabUtility.UnpackPrefabInstance(model, PrefabUnpackMode.Completely, InteractionMode.AutomatedAction);
-                    FreezeCharacterGeometry(model, entry.id);
+                    GameObject model;
+                    if (!string.IsNullOrEmpty(entry.meshData))
+                    {
+                        model = new GameObject(entry.id + "_Mesh");
+                        model.transform.SetParent(wrapper.transform, false);
+                        model.AddComponent<MeshFilter>().sharedMesh = FreeModelsBakedMeshes.Load(entry.meshData);
+                        model.AddComponent<MeshRenderer>();
+                    }
+                    else
+                    {
+                        GameObject source = AssetDatabase.LoadAssetAtPath<GameObject>(Root + "/" + entry.path);
+                        model = (GameObject)PrefabUtility.InstantiatePrefab(source, wrapper.transform);
+                        PrefabUtility.UnpackPrefabInstance(model, PrefabUnpackMode.Completely, InteractionMode.AutomatedAction);
+                    }
                     model.transform.localRotation = Quaternion.Euler(0f, entry.rotationY, 0f) * model.transform.localRotation;
                     model.transform.localPosition = Vector3.zero;
                     Vector3 importedScale = model.transform.localScale;
@@ -199,14 +357,15 @@ namespace FreeModelsImportFixed20261026.Editor
                     Bounds bounds = GetLocalMeshBounds(wrapper.transform);
                     float scale = entry.height / Mathf.Max(bounds.size.y, 0.001f);
                     model.transform.localScale = importedScale * scale;
-                    model.transform.localPosition = new Vector3(-bounds.center.x * scale, -bounds.min.y * scale, -bounds.center.z * scale);
+                    model.transform.localPosition = entry.preserveOrigin ? Vector3.zero :
+                        new Vector3(-bounds.center.x * scale, -bounds.min.y * scale, -bounds.center.z * scale);
                     GameObject saved = PrefabUtility.SaveAsPrefabAsset(wrapper, prefabPath);
                     if (saved == null) throw new InvalidOperationException("프리팹 저장 실패: " + entry.id);
                     result.Add(entry.id, saved);
                 }
                 finally { UnityEngine.Object.DestroyImmediate(wrapper); }
             }
-            foreach (string required in new[] { "survivor", "zombie_a", "zombie_b", "barrel", "crate", "warehouse_a", "warehouse_b", "warehouse_c", "water_tower", "storage_tank", "container_a", "container_b", "planks", "fence" })
+            foreach (string required in new[] { "survivor", "zombie_a", "zombie_b", "barrel", "crate", "warehouse_a", "warehouse_b", "warehouse_c", "water_tower", "storage_tank", "container_a", "container_b", "planks", "fence", "fps_rifle", "fps_smg", "fps_pistol", "fps_arms" })
                 if (!result.ContainsKey(required)) throw new InvalidOperationException("필수 모델 누락: " + required);
             return result;
         }
@@ -216,9 +375,9 @@ namespace FreeModelsImportFixed20261026.Editor
             HashSet<string> paths = new HashSet<string>();
             foreach (Entry entry in catalog.models)
             {
+                if (!string.IsNullOrEmpty(entry.meshData)) continue;
                 paths.Add(Root + "/" + entry.path);
             }
-            paths.Add(Root + "/Source/idle.fbx");
             foreach (string path in paths)
             {
                 ModelImporter model = AssetImporter.GetAtPath(path) as ModelImporter;
@@ -246,66 +405,11 @@ namespace FreeModelsImportFixed20261026.Editor
             }
         }
 
-        private static void FreezeCharacterGeometry(GameObject model, string id)
-        {
-            SkinnedMeshRenderer[] skins = model.GetComponentsInChildren<SkinnedMeshRenderer>(true);
-            if (skins.Length == 0) return;
-
-            // Sample one idle pose in the editor, then bake static geometry. No animation controller
-            // or runtime animation behaviour is added to the user's existing character objects.
-            AnimationClip idle = null;
-            foreach (UnityEngine.Object asset in AssetDatabase.LoadAllAssetsAtPath(Root + "/Source/idle.fbx"))
-            {
-                AnimationClip candidate = asset as AnimationClip;
-                if (candidate == null || candidate.name.StartsWith("__preview__", StringComparison.Ordinal)) continue;
-                if (idle == null || candidate.length > idle.length) idle = candidate;
-            }
-            if (idle != null) idle.SampleAnimation(model, 0f);
-            foreach (Animator animator in model.GetComponentsInChildren<Animator>(true)) animator.enabled = false;
-
-            for (int index = 0; index < skins.Length; index++)
-            {
-                SkinnedMeshRenderer skin = skins[index];
-                string meshPath = Root + "/Meshes/" + id + "_" + index + ".asset";
-                Mesh mesh = new Mesh { name = id + "_StaticPose_" + index };
-                skin.BakeMesh(mesh);
-                if (mesh.vertexCount == 0) throw new InvalidOperationException("캐릭터 메시 생성 실패: " + id);
-                mesh.RecalculateBounds();
-                Mesh stored = AssetDatabase.LoadAssetAtPath<Mesh>(meshPath);
-                if (stored == null) AssetDatabase.CreateAsset(mesh, meshPath);
-                else
-                {
-                    EditorUtility.CopySerialized(mesh, stored);
-                    UnityEngine.Object.DestroyImmediate(mesh);
-                    mesh = stored;
-                }
-                Material[] materials = skin.sharedMaterials;
-                GameObject owner = skin.gameObject;
-                UnityEngine.Object.DestroyImmediate(skin);
-                MeshFilter filter = owner.GetComponent<MeshFilter>();
-                if (filter == null) filter = owner.AddComponent<MeshFilter>();
-                filter.sharedMesh = mesh;
-                MeshRenderer renderer = owner.GetComponent<MeshRenderer>();
-                if (renderer == null) renderer = owner.AddComponent<MeshRenderer>();
-                renderer.sharedMaterials = materials;
-            }
-            foreach (Animator animator in model.GetComponentsInChildren<Animator>(true)) UnityEngine.Object.DestroyImmediate(animator);
-            foreach (Animation animation in model.GetComponentsInChildren<Animation>(true)) UnityEngine.Object.DestroyImmediate(animation);
-        }
-
         private static Material GetMaterial(string name, string texturePath, Color color)
         {
             string path = Root + "/Materials/" + name + ".mat";
             Material material = AssetDatabase.LoadAssetAtPath<Material>(path);
             Texture2D texture = string.IsNullOrEmpty(texturePath) ? null : FreeModelsTextureRecovery.Load(texturePath);
-            if (material != null)
-            {
-                if (material.HasProperty("_BaseMap")) material.SetTexture("_BaseMap", texture);
-                if (material.HasProperty("_MainTex")) material.SetTexture("_MainTex", texture);
-                if (material.HasProperty("_BaseColorMap")) material.SetTexture("_BaseColorMap", texture);
-                EditorUtility.SetDirty(material);
-                return material;
-            }
             Shader shader = null;
             RenderPipelineAsset pipeline = GraphicsSettings.currentRenderPipeline;
             if (pipeline != null)
@@ -316,9 +420,11 @@ namespace FreeModelsImportFixed20261026.Editor
                 else if (pipelineType.IndexOf("HDRender", StringComparison.OrdinalIgnoreCase) >= 0)
                     shader = Shader.Find("HDRP/Lit");
             }
-            if (shader == null) shader = Shader.Find("Standard");
-            if (shader == null) throw new InvalidOperationException("사용 가능한 Lit 셰이더를 찾지 못했습니다.");
-            material = new Material(shader) { name = name };
+            else shader = Shader.Find("Standard");
+            if (shader == null) throw new InvalidOperationException("현재 렌더 파이프라인의 Lit 셰이더를 찾지 못했습니다.");
+            bool created = material == null;
+            if (created) material = new Material(shader) { name = name };
+            else if (material.shader != shader) material.shader = shader;
             if (material.HasProperty("_BaseMap")) material.SetTexture("_BaseMap", texture);
             if (material.HasProperty("_MainTex")) material.SetTexture("_MainTex", texture);
             if (material.HasProperty("_BaseColorMap")) material.SetTexture("_BaseColorMap", texture);
@@ -327,7 +433,8 @@ namespace FreeModelsImportFixed20261026.Editor
             if (material.HasProperty("_Smoothness")) material.SetFloat("_Smoothness", 0.18f);
             if (material.HasProperty("_Glossiness")) material.SetFloat("_Glossiness", 0.18f);
             if (material.HasProperty("_Metallic")) material.SetFloat("_Metallic", 0f);
-            AssetDatabase.CreateAsset(material, path);
+            if (created) AssetDatabase.CreateAsset(material, path);
+            else EditorUtility.SetDirty(material);
             return material;
         }
 
@@ -471,7 +578,7 @@ namespace FreeModelsImportFixed20261026.Editor
 
         private static bool IsGenerated(Transform target)
         {
-            return HasAncestorNamed(target, VisualName) || HasAncestorNamed(target, BackgroundName);
+            return HasAncestorNamed(target, VisualName) || HasAncestorNamed(target, BackgroundName) || HasAncestorNamed(target, FirstPersonName);
         }
 
         private static void SetLayerRecursively(Transform target, int layer)

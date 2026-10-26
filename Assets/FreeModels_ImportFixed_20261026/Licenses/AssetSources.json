@@ -17,7 +17,13 @@
       "name": "Animated Characters Survivors 1.1",
       "page": "https://kenney.nl/assets/animated-characters-survivors",
       "sha256": "fdadced07a0454c9b7f0b46507be6144a072b4d03b4ffa37f225893c76c62845"
+    },
+    {
+      "name": "Blaster Kit 2.1",
+      "page": "https://kenney.nl/assets/blaster-kit",
+      "sha256": "91e3093e95427d59625e7e2ce2d0399b861600160fd0b4ada7714796b67cea8c"
     }
   ],
-  "scope": "Additive visual-only package. Does not contain or replace any original gameplay script. Background models have no new colliders. Character animation controllers are not connected."
+  "scope": "Additive visual-only package. Does not contain or replace any original gameplay script. Background models have no new colliders. Character animation controllers are not connected.",
+  "derived_meshes": "Character standing poses, cropped/reposed FPS forearms, and gun axis conversion are baked offline. Original FBX is retained."
 }

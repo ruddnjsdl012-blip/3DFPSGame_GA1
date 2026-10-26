@@ -149,31 +149,71 @@
     },
     {
       "id": "survivor",
-      "path": "Models/Characters/characterMedium.fbx",
+      "path": "Models/Characters/survivor_upright.obj",
       "texture": "Textures/survivorMaleB.png",
       "height": 1.9,
-      "rotationY": 0
+      "rotationY": 0,
+      "meshData": "Data/BakedMeshesV5/survivor_upright.json"
     },
     {
       "id": "survivor_female",
-      "path": "Models/Characters/characterMedium.fbx",
+      "path": "Models/Characters/survivor_upright.obj",
       "texture": "Textures/survivorFemaleA.png",
       "height": 1.9,
-      "rotationY": 0
+      "rotationY": 0,
+      "meshData": "Data/BakedMeshesV5/survivor_upright.json"
     },
     {
       "id": "zombie_a",
-      "path": "Models/Characters/characterMedium.fbx",
+      "path": "Models/Characters/zombie_upright.obj",
       "texture": "Textures/zombieA.png",
       "height": 1.9,
-      "rotationY": 0
+      "rotationY": 0,
+      "meshData": "Data/BakedMeshesV5/zombie_upright.json"
     },
     {
       "id": "zombie_b",
-      "path": "Models/Characters/characterMedium.fbx",
+      "path": "Models/Characters/zombie_upright.obj",
       "texture": "Textures/zombieC.png",
       "height": 1.9,
-      "rotationY": 0
+      "rotationY": 0,
+      "meshData": "Data/BakedMeshesV5/zombie_upright.json"
+    },
+    {
+      "id": "fps_rifle",
+      "path": "Models/Weapons/fps_rifle.obj",
+      "meshData": "Data/BakedMeshesV5/fps_rifle.json",
+      "texture": "Textures/Weapons_Palette.png",
+      "height": 0.31837802988121755,
+      "rotationY": 0,
+      "preserveOrigin": true
+    },
+    {
+      "id": "fps_smg",
+      "path": "Models/Weapons/fps_smg.obj",
+      "meshData": "Data/BakedMeshesV5/fps_smg.json",
+      "texture": "Textures/Weapons_Palette.png",
+      "height": 0.31913119000000006,
+      "rotationY": 0,
+      "preserveOrigin": true
+    },
+    {
+      "id": "fps_pistol",
+      "path": "Models/Weapons/fps_pistol.obj",
+      "meshData": "Data/BakedMeshesV5/fps_pistol.json",
+      "texture": "Textures/Weapons_Palette.png",
+      "height": 0.2956265651035468,
+      "rotationY": 0,
+      "preserveOrigin": true
+    },
+    {
+      "id": "fps_arms",
+      "path": "Models/Characters/fps_arms.obj",
+      "meshData": "Data/BakedMeshesV5/fps_arms.json",
+      "texture": "Textures/survivorMaleB.png",
+      "height": 1.00460532612576,
+      "rotationY": 0,
+      "preserveOrigin": true
     }
   ]
 }

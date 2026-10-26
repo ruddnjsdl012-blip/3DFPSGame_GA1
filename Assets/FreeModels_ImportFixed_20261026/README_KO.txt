@@ -1,81 +1,79 @@
-무료 3D 모델 외형 적용 패키지
-대상: Unity 6.3 / 사용자가 보여준 GameScene
+무료 모델 V5: 서 있는 캐릭터 + 1인칭 총/팔
+대상: Unity 6.3 / 기존 GameScene
 
 적용 방법
-1. 오류가 나던 Import 창을 닫고 Play 모드를 종료합니다.
-2. FreeModels_TextureFix_V4.unitypackage를 열어 전체 Import합니다.
-3. 기존 GameScene을 엽니다.
-4. Tools > Free Models Fixed > Apply Models to Current Scene 을 누릅니다.
-5. 적용 후 Ctrl+S로 씬을 저장합니다.
+1. Play 모드를 종료합니다.
+2. FreeModels_Upright_FPS_V5.unitypackage를 열고 전체 Import합니다.
+   기존 V3/V4 폴더 위에 덮어쓰면 됩니다. 기존 폴더를 삭제할 필요가 없습니다.
+3. 컴파일과 Import가 끝나면 기존 GameScene을 엽니다.
+4. Tools > Free Models Fixed > Apply Models to Current Scene 을 실행합니다.
+5. Game 탭에서 1인칭 총을 확인하고 Ctrl+S로 씬을 저장합니다.
 
-이번 수정본
-- 텍스처 6종의 RGBA PNG 데이터를 에디터 코드에도 내장했습니다.
-- PNG 에셋 조회 성공 여부에 의존하지 않고 Unity Texture2D .asset을 생성합니다.
-- 기존에 생성된 재질에도 정상 텍스처를 다시 연결합니다.
-- 기존 V3와 동일한 경로/GUID를 유지하여 덮어쓰기 업데이트합니다.
-- 올린 Unity 원본의 TAR 헤더 형식과 GZIP 설정을 사용해 다시 구성했습니다.
-- 내부 압축 파일명은 .tar로 지정했습니다.
-- 빈 폴더나 폴더 전용 항목 없이 실제 에셋 파일만 포함합니다.
-- 메타데이터는 원본과 동일한 fileFormatVersion/guid 기본 형식입니다.
-- 모델/텍스처 설정은 에디터의 정식 Importer API로 준비합니다.
-- 새 경로와 새 GUID, 별도 에디터 클래스/메뉴를 사용합니다.
+캐릭터 수정
+- 생존자는 팔을 내리고 서 있는 자세, 좀비는 팔을 앞으로 뻗고 서 있는 자세입니다.
+- 원본 FBX의 골격/가중치/UV를 사용해 자세를 미리 계산한 실제 메시입니다.
+- Unity 좌표계의 Y 위쪽, +Z 정면을 메시 데이터 자체에 반영했습니다.
+- Unity에서 별도 FBX 애니메이션을 샘플링하지 않아 루트 회전이 다시 덮어써지지 않습니다.
+- 이전에 생성된 survivor/zombie 프리팹과 씬의 __FreeModels_Visual도 갱신합니다.
+- 원본 FBX와 idle/run/jump 파일도 그대로 포함되어 있습니다.
+- 이번 버전의 캐릭터 외형은 정적인 모델입니다. 이동/공격 애니메이션 연동은 포함하지 않습니다.
 
-포함 모델
-- 생존자 외형 2종, 좀비 외형 2종
-- 드럼통, 상자, 큰 상자, 보급 상자, 판자 더미, 보강 울타리, 작업대, 잔해
-- 창고/공장 건물, 물탱크 타워, 저장 탱크, 굴뚝, 컨테이너
-- 25개 모델 프리팹을 에디터에서 생성합니다.
+1인칭 총
+- Kenney Blaster Kit의 실제 총 모델과 기존 생존자 에셋에서 가져온 팔/손을 사용합니다.
+- 기본은 초록색 라이플입니다.
+- 게임용 MainCamera의 자식으로 __FreeModels_FirstPerson을 추가합니다.
+- 기존 카메라의 회전과 이동을 따라 화면 오른쪽 아래에 총과 팔이 표시됩니다.
+- 카메라 방향, 위치, 태그, FOV, 이동/발사 스크립트, 데미지, 탄약/재장전 스탯은 변경하지 않습니다.
+- 총/팔에 충돌체를 추가하지 않아 기존 Camera.main 레이캐스트를 가리지 않습니다.
+- 총이 근거리 클리핑으로 잘리지 않도록 Near Clip이 0.03보다 큰 경우에만 0.03으로 줄입니다.
+- 로컬 Player의 새 몸 모델은 그림자만 표시하여 카메라에 얼굴이 겹쳐 보이지 않게 합니다.
+- 전체 생존자 모델은 Prefabs/survivor.prefab에서 확인할 수 있습니다.
+- Hierarchy의 MainCamera > __FreeModels_FirstPerson에서 총 전체 배치를 조정할 수 있습니다.
+- 총/팔에는 발사, 반동, 재장전 애니메이션을 추가하지 않았습니다.
 
-현재 씬에 적용하는 내용
-- Player / Zombie / Drum / Box 컴포넌트가 붙은 오브젝트를 찾습니다.
-- 원래 오브젝트 아래에 __FreeModels_Visual 이라는 외형 자식을 추가합니다.
-- 원래 충돌체 크기와 중심을 기준으로 외형의 크기와 발 위치를 맞춥니다.
-- 원래 오브젝트의 MeshRenderer만 숨깁니다.
-- 기존 오브젝트의 스크립트, 태그, 레이어, 위치, 충돌체, Rigidbody,
-  CharacterController, 카메라, Canvas와 UI는 유지합니다.
-- Ground와 Map 아래의 기본 MeshRenderer 재질을 회색 계열로 맞춥니다.
-- 기존 Map의 바깥에 FreeModels_Background라는 산업 시설 배경을 배치합니다.
-- 배경은 장식 모델이며 새 충돌체나 AI, 조명, 카메라를 추가하지 않습니다.
+다른 총 외형 선택
+Tools > Free Models Fixed > First Person Weapon > Rifle / SMG / Pistol
+에디터에서 외형을 바꾸는 메뉴입니다. 게임 실행 중 무기 전환 기능은 추가하지 않습니다.
 
-애니메이션과 기능 범위
-- 기존 이동/공격/체력/FSM/드럼통 폭발 코드는 교체하지 않습니다.
-- 캐릭터 외형은 에디터에서 한 번 포즈를 샘플링한 정적 메시입니다.
-- Animator Controller나 이동/공격 애니메이션 연동은 추가하지 않습니다.
-- 에디터 적용 도구는 Editor 폴더에만 있으며 게임 빌드에는 포함되지 않습니다.
+기존 맵과 기능
+- Player / Zombie / Drum / Box 컴포넌트가 있는 씬 오브젝트에 모델 외형을 붙입니다.
+- 원래 오브젝트의 스크립트, 충돌체, Rigidbody, CharacterController, 좌표, 태그를 유지합니다.
+- 기존 Map 바깥의 산업 시설 배경은 중복 생성하지 않습니다.
+- 기존 씬의 Canvas와 UI는 변경하지 않습니다.
+- 원래 게임 스크립트 66개를 포함하거나 덮어쓰지 않습니다.
+- 에디터 도구 C# 3개만 Editor 폴더에 추가합니다. 게임 빌드에는 포함되지 않습니다.
 
-직접 배치할 경우
-Tools > Free Models Fixed > Build Model Prefabs Only 를 누릅니다.
-Assets/FreeModels_ImportFixed_20261026/Prefabs 폴더의 모델을 Scene에 드래그합니다.
-Models 폴더에는 실제 OBJ/FBX 원본 모델이, Textures에는 해당 텍스처가 있습니다.
+텍스처와 Import
+- V4의 내장 RGBA PNG 복구 방식을 유지하고 무기 텍스처를 추가했습니다.
+- 7종 텍스처 데이터를 사용해 지속되는 Texture2D .asset을 생성합니다.
+- 현재 Built-in / URP / HDRP에 맞는 Lit 셰이더와 텍스처를 재질에 연결합니다.
+- 기존 V3/V4 파일의 경로와 GUID를 유지합니다.
+- 사용자가 올린 원본의 Unity TAR 헤더와 GZIP 형식을 사용합니다.
+- 빈 폴더 전용 항목을 포함하지 않습니다.
 
-다시 적용 / 되돌리기
-- 같은 오브젝트에 메뉴를 여러 번 실행해도 외형 자식을 중복으로 붙이지 않습니다.
-- 적용 직후 Edit > Undo 또는 Ctrl+Z 한 번으로 씬 변경을 되돌릴 수 있습니다.
-- 기존 프리팹 원본 에셋은 변경하지 않으므로 새로 생성되는 원본 프리팹은 별도 적용이 필요합니다.
-- 필요하면 생성된 프리팹의 외형 자식을 직접 기존 프리팹에 넣을 수 있습니다.
+직접 모델만 가져오기
+Tools > Free Models Fixed > Build Model Prefabs Only
+Assets/FreeModels_ImportFixed_20261026/Prefabs에서 사용할 수 있습니다.
+서 있는 캐릭터, 총 3종, 1인칭 팔, 기존 산업 시설/소품을 포함해 프리팹 29개를 생성합니다.
+Models에는 확인 가능한 OBJ/FBX, Data/BakedMeshesV5에는 자세/축을 고정한 메시 데이터가 있습니다.
 
-프로젝트 파일 확인 결과
-업로드된 test(20261026-021403).unitypackage에는 C# 스크립트 66개만 포함되어
-GameScene과 기존 프리팹의 좌표/참조를 직접 수정할 수 없었습니다.
-이 추가 패키지는 실행 중인 사용자의 원래 씬에서 외형을 적용하는 방식입니다.
-원래 66개 스크립트는 이 패키지에 포함하거나 덮어쓰지 않습니다.
+되돌리기와 범위
+- 적용 직후 Ctrl+Z로 씬 변경을 되돌릴 수 있습니다.
+- 같은 메뉴를 다시 실행하면 이 도구가 만든 외형 자식을 교체합니다.
+- 원래 스크립트가 참조하는 스폰용 프리팹 원본은 별도로 수정하지 않습니다.
+  해당 프리팹이 외형 없는 원본이면 새로 생성된 캐릭터에도 외형 자식을 붙여야 합니다.
+- 업로드된 원본은 스크립트만 포함했으며 GameScene과 스폰용 프리팹은 포함하지 않았습니다.
+  따라서 사용자의 씬을 연 상태에서 메뉴를 실행하는 방식으로 적용합니다.
 
-검증 범위
-- 원본 ZIP 무결성, OBJ 메시/UV 인덱스, PNG 파일, FBX 구조를 검사했습니다.
-- 에디터 코드의 C# 구문과 패키지의 GUID/상위 폴더/메타데이터 구성을 검사했습니다.
-- 이 작업 환경에는 Unity Editor가 없어 실제 Unity Import/Play 실행은 검증하지 못했습니다.
-- 수정본은 생성용 빈 폴더 항목을 포함하지 않고, 실제 파일만 Unity 기본 순서로 묶었습니다.
+검증
+- 캐릭터의 서 있는 자세와 총/팔 배치를 메시 렌더링으로 확인했습니다.
+- 메시 좌표/UV/삼각형 인덱스/법선, 내장 PNG, C# 구문, 패키지 구조/GUID를 검사했습니다.
+- 이 환경에는 Unity Editor가 없어 실제 Unity Import/Play 검증은 수행하지 못했습니다.
 
-에셋 출처 / 라이선스
-제작자: Kenney
-모두 CC0 1.0. 개인/교육/상업 프로젝트에서 사용 가능한 무료 에셋입니다.
-각 원본 라이선스와 출처/아카이브 해시는 Licenses 폴더에 보관했습니다.
-
-City Kit Industrial 2.0
+에셋 출처
+제작자: Kenney / CC0 1.0
+각 원본 라이선스와 다운로드 아카이브 해시는 Licenses에 있습니다.
 https://kenney.nl/assets/city-kit-industrial
-
-Survival Kit 2.0
 https://kenney.nl/assets/survival-kit
-
-Animated Characters Survivors 1.1
 https://kenney.nl/assets/animated-characters-survivors
+https://kenney.nl/assets/blaster-kit
