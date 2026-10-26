@@ -27,6 +27,7 @@ public class Zombie : MonoBehaviour, IDamageable
     [SerializeField] private float _attackRange = 1.5f; // 공격 범위
     [SerializeField] private float _attackInterval = 1.2f; // 공격 간격
     [SerializeField] private float _moveSpeed = 5; // 이동속도
+    [SerializeField] private float _turnSpeed = 540f; // 회전 속도 (도/초)
     [SerializeField] private float _maxHealth = 30;
     private float _health;
 
@@ -38,15 +39,32 @@ public class Zombie : MonoBehaviour, IDamageable
     private Vector3 _startPosition;
     private GameObject _player;
 
+    // 스포너가 만든 좀비는 거리와 상관없이 플레이어를 끝까지 쫓는다.
+    private bool _isHunter = false;
+
+    // 난이도 배율을 적용하기 전의 원래 스탯
+    private bool _baseCaptured = false;
+    private float _baseMaxHealth;
+    private float _baseAttackDamage;
+    private bool _started = false;
+
     public float MaxHealth => _maxHealth;
     public float Health => _health;
+    public float AttackDamage => _attackDamage;
 
 
     private ZombieState _state = ZombieState.Idle;
 
+    // 벽을 돌아서 가는 길을 찾아 준다. (NavMesh가 없으면 직선 이동)
+    // Unity 객체를 쓰므로 필드 초기화가 아니라 Start에서 만든다.
+    private ZombiePathFollower _pathFollower;
+
     private void Start()
     {
+        CaptureBaseStats();
+        _started = true;
         _health = _maxHealth;
+        _pathFollower = new ZombiePathFollower();
 
         _controller = GetComponent<CharacterController>();
         _startPosition = transform.position;
@@ -86,6 +104,41 @@ public class Zombie : MonoBehaviour, IDamageable
                 Attack();
                 break;
         }
+    }
+
+    // 스포너에서 부른다. 감지 거리와 복귀 거리를 무시하고 플레이어를 추격한다.
+    public void BeginHunt()
+    {
+        _isHunter = true;
+    }
+
+    // 시간이 지날수록 강해지는 난이도 배율을 적용한다. (원래 스탯 기준)
+    public void ApplyStatMultiplier(float healthMultiplier, float damageMultiplier)
+    {
+        CaptureBaseStats();
+
+        // 이미 싸우고 있는 좀비는 남은 체력 비율을 유지한다.
+        float ratio = _started && _maxHealth > 0f ? _health / _maxHealth : 1f;
+
+        _maxHealth = _baseMaxHealth * Mathf.Max(0.01f, healthMultiplier);
+        _attackDamage = _baseAttackDamage * Mathf.Max(0f, damageMultiplier);
+
+        if (_started && _state != ZombieState.Death)
+        {
+            _health = _maxHealth * ratio;
+        }
+    }
+
+    private void CaptureBaseStats()
+    {
+        if (_baseCaptured)
+        {
+            return;
+        }
+
+        _baseCaptured = true;
+        _baseMaxHealth = _maxHealth;
+        _baseAttackDamage = _attackDamage;
     }
 
     // 대미지를 받는다.
@@ -156,7 +209,7 @@ public class Zombie : MonoBehaviour, IDamageable
 
         // 플레이어 가까워지면 Trace 상태로 전이한다.
         float distance = Vector3.Distance(transform.position, _player.transform.position);
-        if (distance <= _detectDistance)
+        if (_isHunter || distance <= _detectDistance)
         {
             Debug.Log($"{_state} -> Trace");
             _state = ZombieState.Trace;
@@ -169,8 +222,9 @@ public class Zombie : MonoBehaviour, IDamageable
         // Todo. Run 애니메이션 실행
 
 
-        // 처음 자리에서 너무 멀어지면 돌아간다.
-        if (Vector3.Distance(transform.position, _startPosition) > _combackDistance)
+        // 처음 자리에서 너무 멀어지면 돌아간다. (스포너 좀비는 돌아가지 않는다)
+        if (_isHunter == false
+            && Vector3.Distance(transform.position, _startPosition) > _combackDistance)
         {
             Debug.Log($"{_state} -> Comeback");
             _state = ZombieState.Comeback;
@@ -187,12 +241,9 @@ public class Zombie : MonoBehaviour, IDamageable
         }
 
 
-        Vector3 direction = _player.transform.position - transform.position;
-        direction.y = 0f;
-        direction.Normalize();
-
-        transform.forward = direction;
-        _controller.SimpleMove(direction * _moveSpeed);
+        // 벽을 피해 플레이어에게 가는 방향
+        Vector3 direction = _pathFollower.GetDirection(transform.position, _player.transform.position);
+        Move(direction);
     }
 
     // 복귀: 처음 자리로 돌아간다.
@@ -206,12 +257,22 @@ public class Zombie : MonoBehaviour, IDamageable
             return;
         }
 
-        // 처음 자리로 돌아간다
-        Vector3 direction = _startPosition - transform.position;
-        direction.y = 0f;
-        direction.Normalize();
+        // 벽을 피해 처음 자리로 돌아간다
+        Vector3 direction = _pathFollower.GetDirection(transform.position, _startPosition);
+        Move(direction);
+    }
 
-        transform.forward = direction;
+    // 정한 방향으로 걷는다. 몸은 그 방향으로 부드럽게 돌린다.
+    private void Move(Vector3 direction)
+    {
+        if (direction.sqrMagnitude < 0.0001f)
+        {
+            _controller.SimpleMove(Vector3.zero);
+            return;
+        }
+
+        Quaternion look = Quaternion.LookRotation(direction);
+        transform.rotation = Quaternion.RotateTowards(transform.rotation, look, _turnSpeed * Time.deltaTime);
         _controller.SimpleMove(direction * _moveSpeed);
     }
 

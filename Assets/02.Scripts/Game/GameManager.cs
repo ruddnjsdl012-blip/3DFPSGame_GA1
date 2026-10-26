@@ -21,13 +21,19 @@ public class GameManager : MonoBehaviour
     [Header("시작 연출")]
     [Tooltip("켜면 준비 2초 대신 3, 2, 1을 각각 1초 보여 줍니다.")]
     [SerializeField] private bool _useCountdown;
+    [Header("승리 조건")]
+    [Tooltip("이 수만큼 좀비를 처치하면 승리한다. (스포너가 계속 좀비를 만든다)")]
+    [SerializeField, Min(1)] private int _targetKills = 50;
 
     private readonly HashSet<Zombie> _livingZombies = new HashSet<Zombie>();
     private GameState _state = GameState.Ready;
     private bool _restarting;
+    private int _killCount;
 
     public GameState State => _state;
     public int RemainingZombies => _livingZombies.Count;
+    public int KillCount => _killCount;
+    public int TargetKills => _targetKills;
 
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
     private static void ResetStatics()
@@ -68,6 +74,12 @@ public class GameManager : MonoBehaviour
         foreach (Zombie zombie in zombies)
         {
             _livingZombies.Add(zombie);
+        }
+
+        // 씬에 스폰 매니저가 없으면 만든다. (스포너는 플레이할 때마다 무작위 위치에 생긴다)
+        if (FindAnyObjectByType<ZombieSpawnManager>() == null)
+        {
+            new GameObject("ZombieSpawnManager").AddComponent<ZombieSpawnManager>();
         }
 
         _cursorManager.LockCursor();
@@ -133,15 +145,26 @@ public class GameManager : MonoBehaviour
         ShowResult(GameState.GameOver, "게임 오버", Color.red);
     }
 
+    // 스포너가 새로 만든 좀비를 등록한다.
+    public void RegisterZombie(Zombie zombie)
+    {
+        if (zombie != null)
+        {
+            _livingZombies.Add(zombie);
+        }
+    }
+
     public void NotifyZombieDefeated(Zombie zombie)
     {
-        // 같은 좀비가 두 번 알려도 남은 수는 한 번만 줄어든다.
+        // 같은 좀비가 두 번 알려도 처치 수는 한 번만 늘어난다.
         if (zombie == null || _livingZombies.Remove(zombie) == false)
         {
             return;
         }
 
-        if (_livingZombies.Count == 0 && _state == GameState.Playing)
+        _killCount++;
+
+        if (_killCount >= _targetKills && _state == GameState.Playing)
         {
             ShowResult(GameState.Clear, "승리!", Color.green);
         }
