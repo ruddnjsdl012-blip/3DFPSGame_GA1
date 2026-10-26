@@ -2,7 +2,8 @@ using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
 
-// 화면 상단 중앙: 처치 수 / 목표, 위험도 레벨과 경과 시간, 레벨이 오를 때 알림.
+// 화면 상단 중앙: 처치 수 / 목표, 위험도 레벨과 경과 시간, 안전가옥까지 거리,
+// 레벨이 오를 때와 호드가 올 때 알림.
 // ZombieSpawnManager가 자동으로 만든다.
 [DisallowMultipleComponent]
 public class UI_ZombieStatusHud : MonoBehaviour
@@ -25,6 +26,11 @@ public class UI_ZombieStatusHud : MonoBehaviour
     private TextMeshProUGUI _alertText;
     private TextMeshProUGUI _alertSubText;
     private float _alertTimer;
+    private RectTransform _panel;
+    private TextMeshProUGUI _objectiveText;
+    private bool _objectiveShown;
+    private int _lastDistance = -1;
+    private Transform _player;
 
     private int _lastKills = -1;
     private int _lastTarget = -1;
@@ -61,6 +67,7 @@ public class UI_ZombieStatusHud : MonoBehaviour
         if (_manager != null)
         {
             _manager.LevelChanged -= HandleLevelChanged;
+            _manager.HordeStarted -= HandleHordeStarted;
         }
 
         _manager = manager;
@@ -68,7 +75,20 @@ public class UI_ZombieStatusHud : MonoBehaviour
         if (_manager != null)
         {
             _manager.LevelChanged += HandleLevelChanged;
+            _manager.HordeStarted += HandleHordeStarted;
         }
+    }
+
+    private void HandleHordeStarted(int count)
+    {
+        if (_alertText == null)
+        {
+            return;
+        }
+
+        _alertText.text = _korean ? "호드가 몰려온다!" : "HORDE INCOMING!";
+        _alertSubText.text = _korean ? $"좀비 {count}마리" : $"{count} ZOMBIES";
+        _alertTimer = _alertDuration;
     }
 
     private void HandleLevelChanged(int level)
@@ -126,6 +146,8 @@ public class UI_ZombieStatusHud : MonoBehaviour
             _levelText.text = (_korean ? "위험도 LV " : "THREAT LV ") + level + "   ·   " + time;
         }
 
+        UpdateObjective();
+
         // 레벨업 알림 (서서히 사라짐)
         if (_alertTimer > 0f)
         {
@@ -145,6 +167,45 @@ public class UI_ZombieStatusHud : MonoBehaviour
         {
             _alertText.gameObject.SetActive(false);
             _alertSubText.gameObject.SetActive(false);
+        }
+    }
+
+    // 안전가옥이 있으면 남은 거리를 보여 준다.
+    private void UpdateObjective()
+    {
+        SafeRoomGoal goal = SafeRoomGoal.Current;
+        bool show = goal != null;
+        if (show != _objectiveShown)
+        {
+            _objectiveShown = show;
+            _objectiveText.gameObject.SetActive(show);
+            _panel.sizeDelta = new Vector2(_panel.sizeDelta.x, show ? 86f : 64f);
+            _lastDistance = -1;
+        }
+
+        if (show == false)
+        {
+            return;
+        }
+
+        if (_player == null)
+        {
+            GameObject player = GameObject.FindGameObjectWithTag("Player");
+            if (player == null)
+            {
+                return;
+            }
+
+            _player = player.transform;
+        }
+
+        Vector3 offset = goal.Position - _player.position;
+        offset.y = 0f;
+        int distance = Mathf.RoundToInt(offset.magnitude);
+        if (distance != _lastDistance)
+        {
+            _lastDistance = distance;
+            _objectiveText.text = (_korean ? "안전가옥까지 " : "SAFE ROOM ") + distance + "m";
         }
     }
 
@@ -180,6 +241,7 @@ public class UI_ZombieStatusHud : MonoBehaviour
             new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0.5f, 1f),
             new Vector2(0f, -14f), new Vector2(300f, 64f));
         CreateImage(panel, _panelColor);
+        _panel = panel;
 
         RectTransform kill = CreateRect("Kills", panel,
             new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(0.5f, 1f),
@@ -198,6 +260,12 @@ public class UI_ZombieStatusHud : MonoBehaviour
             new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(0.5f, 1f),
             new Vector2(0f, -42f), new Vector2(0f, 20f));
         _levelText = CreateText(level, font, 13f, FontStyles.Bold, TextAlignmentOptions.Center, _subTextColor);
+
+        RectTransform objective = CreateRect("Objective", panel,
+            new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(0.5f, 1f),
+            new Vector2(0f, -62f), new Vector2(0f, 20f));
+        _objectiveText = CreateText(objective, font, 14f, FontStyles.Bold, TextAlignmentOptions.Center, new Color(0.55f, 1f, 0.6f));
+        _objectiveText.gameObject.SetActive(false);
 
         // 레벨업 알림
         RectTransform alert = CreateRect("LevelUpAlert", canvasTransform,
@@ -294,6 +362,7 @@ public class UI_ZombieStatusHud : MonoBehaviour
         if (_manager != null)
         {
             _manager.LevelChanged -= HandleLevelChanged;
+            _manager.HordeStarted -= HandleHordeStarted;
         }
     }
 }

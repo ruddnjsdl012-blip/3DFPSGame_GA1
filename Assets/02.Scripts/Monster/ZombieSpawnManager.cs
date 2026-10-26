@@ -5,7 +5,8 @@ using UnityEngine;
 using UnityEngine.AI;
 
 // 플레이할 때마다 맵 곳곳의 무작위 위치에 좀비 스포너를 만들고, 시간이 지날수록
-// 좀비를 더 자주, 더 많이, 더 강하게 만든다.
+// 좀비를 더 자주, 더 많이, 더 강하게 만든다. 좀비는 플레이어의 '현재 위치' 주변
+// 안 보이는 스포너에서 나오고, 가끔 호드(한꺼번에 몰려오는 무리)가 온다.
 // 씬에 배치하지 않아도 GameManager가 시작할 때 자동으로 만든다.
 // (빈 GameObject에 직접 붙여 두면 Inspector에서 값을 조절할 수 있다)
 [DisallowMultipleComponent]
@@ -16,11 +17,13 @@ public class ZombieSpawnManager : MonoBehaviour
     [SerializeField] private Zombie _zombiePrefab;
 
     [Header("스포너 위치 (플레이할 때마다 무작위)")]
-    [SerializeField, Min(1)] private int _spawnerCount = 8;
+    [Tooltip("맵 전체에 만들 스포너의 최대 개수 (맵이 좁으면 간격 때문에 더 적게 생긴다)")]
+    [SerializeField, Min(1)] private int _spawnerCount = 30;
     [Tooltip("플레이어 시작 위치에서 이 거리보다 가까운 곳에는 만들지 않는다.")]
     [SerializeField, Min(0f)] private float _minDistanceFromPlayer = 15f;
-    [Tooltip("플레이어 시작 위치에서 이 거리보다 먼 곳에는 만들지 않는다.")]
-    [SerializeField, Min(1f)] private float _maxDistanceFromPlayer = 45f;
+    [Tooltip("좀비는 플레이어의 현재 위치에서 이 거리 범위 안에 있는 스포너에서 나온다.")]
+    [SerializeField, Min(0f)] private float _spawnDistanceMin = 12f;
+    [SerializeField, Min(1f)] private float _spawnDistanceMax = 45f;
     [Tooltip("스포너끼리 최소 간격")]
     [SerializeField, Min(0f)] private float _minSpacing = 9f;
     [Tooltip("플레이어가 서 있는 바닥과 높이가 이만큼 넘게 차이 나는 곳(지붕, 컨테이너 위 등)은 제외")]
@@ -54,6 +57,17 @@ public class ZombieSpawnManager : MonoBehaviour
     [Tooltip("켜면 레벨이 오를 때 이미 살아 있는 좀비도 강해진다. 끄면 새로 나오는 좀비만 강해진다.")]
     [SerializeField] private bool _applyToLivingZombies = false;
 
+    [Header("호드 (한꺼번에 몰려오는 무리)")]
+    [SerializeField] private bool _enableHorde = true;
+    [Tooltip("게임 시작 후 첫 호드까지의 시간(초)")]
+    [SerializeField, Min(1f)] private float _firstHordeDelay = 60f;
+    [Tooltip("호드 사이의 간격(초)")]
+    [SerializeField, Min(5f)] private float _hordeInterval = 75f;
+    [SerializeField, Min(1)] private int _hordeBaseSize = 6;
+    [SerializeField, Min(0)] private int _hordeSizePerLevel = 2;
+    [Tooltip("호드 좀비를 한 마리씩 내보내는 간격(초)")]
+    [SerializeField, Min(0.05f)] private float _hordeSpawnGap = 0.3f;
+
     private readonly List<ZombieSpawner> _spawners = new List<ZombieSpawner>();
     private readonly List<Zombie> _spawned = new List<Zombie>();
     private Zombie _template;
@@ -66,8 +80,12 @@ public class ZombieSpawnManager : MonoBehaviour
     private float _clearRadius = 0.4f;
     private float _clearHeight = 1.8f;
     private bool _ready;
+    private float _nextHordeTime;
+    private int _hordeRemaining;
+    private float _hordeTimer;
 
     public event Action<int> LevelChanged;
+    public event Action<int> HordeStarted; // 호드 좀비 수
 
     public int Level => _level;
     public float ElapsedTime => _elapsed;
@@ -117,16 +135,17 @@ public class ZombieSpawnManager : MonoBehaviour
         // 2) 플레이어까지 걸어서 갈 수 있는 곳에만 스포너를 만든다.
         CreateSpawners();
         _spawnTimer = _startDelay;
+        _nextHordeTime = _firstHordeDelay;
         _ready = _spawners.Count > 0;
     }
 
-    // NavMesh를 만들 범위: 맵 전체, 단 너무 넓으면 플레이어 주변만
+    // NavMesh를 만들 범위: 맵 전체, 단 너무 넓으면 플레이어 주변 400m까지만
     private Bounds GetNavMeshArea()
     {
         Bounds map = GetMapArea();
-        map.Expand(new Vector3(2f, 4f, 2f));
+        map.Expand(new Vector3(4f, 4f, 4f));
 
-        float half = _maxDistanceFromPlayer + 25f;
+        const float half = 200f;
         Vector3 min = map.min;
         Vector3 max = map.max;
         min.x = Mathf.Max(min.x, _player.position.x - half);
@@ -184,6 +203,8 @@ public class ZombieSpawnManager : MonoBehaviour
             LevelChanged?.Invoke(_level);
         }
 
+        UpdateHorde(dt);
+
         _spawnTimer -= dt;
         if (_spawnTimer > 0f)
         {
@@ -194,8 +215,46 @@ public class ZombieSpawnManager : MonoBehaviour
 
         if (CountAlive() < CurrentMaxAlive())
         {
-            TrySpawn();
+            TrySpawn(false);
         }
+    }
+
+    // 일정 시간마다 좀비 무리를 짧은 간격으로 한꺼번에 내보낸다.
+    private void UpdateHorde(float dt)
+    {
+        if (_enableHorde == false)
+        {
+            return;
+        }
+
+        if (_hordeRemaining <= 0 && _elapsed >= _nextHordeTime)
+        {
+            _hordeRemaining = _hordeBaseSize + _hordeSizePerLevel * (_level - 1);
+            _hordeTimer = 0f;
+            _nextHordeTime = _elapsed + _hordeInterval;
+            Debug.Log($"호드 출현! {_hordeRemaining}마리");
+            HordeStarted?.Invoke(_hordeRemaining);
+        }
+
+        if (_hordeRemaining <= 0)
+        {
+            return;
+        }
+
+        _hordeTimer -= dt;
+        if (_hordeTimer > 0f)
+        {
+            return;
+        }
+
+        _hordeTimer = _hordeSpawnGap;
+        // 호드는 최대 수를 무시하지만, 너무 많아지지 않게 상한은 둔다.
+        if (CountAlive() < _maxAliveLimit + 15)
+        {
+            TrySpawn(true);
+        }
+
+        _hordeRemaining--;
     }
 
     private float CurrentSpawnInterval()
@@ -222,9 +281,9 @@ public class ZombieSpawnManager : MonoBehaviour
 
     // ----- 좀비 생성 -----
 
-    private void TrySpawn()
+    private void TrySpawn(bool horde)
     {
-        ZombieSpawner spawner = PickSpawner();
+        ZombieSpawner spawner = PickSpawner(horde);
         if (spawner == null)
         {
             return;
@@ -272,24 +331,38 @@ public class ZombieSpawnManager : MonoBehaviour
         }
     }
 
-    // 플레이어와 너무 가깝지 않고, 가능하면 화면에 보이지 않는 스포너를 고른다.
-    private ZombieSpawner PickSpawner()
+    // 플레이어 현재 위치에서 적당히 떨어져 있고, 가능하면 화면에 보이지 않는 스포너를 고른다.
+    private ZombieSpawner PickSpawner(bool horde)
     {
         Camera view = Camera.main;
         List<ZombieSpawner> hidden = new List<ZombieSpawner>();
         List<ZombieSpawner> visible = new List<ZombieSpawner>();
-        float minDistance = _minDistanceFromPlayer * 0.6f;
+        ZombieSpawner nearestOutside = null;
+        float nearestOutsideDistance = float.MaxValue;
 
         foreach (ZombieSpawner spawner in _spawners)
         {
-            if (spawner == null || spawner.IsReady == false)
+            if (spawner == null || (horde == false && spawner.IsReady == false))
             {
                 continue;
             }
 
             Vector3 position = spawner.transform.position;
-            if (Vector3.Distance(position, _player.position) < minDistance)
+            float distance = Vector3.Distance(position, _player.position);
+            if (distance < _spawnDistanceMin)
             {
+                continue;
+            }
+
+            if (distance > _spawnDistanceMax)
+            {
+                // 범위 안에 스포너가 하나도 없을 때를 위해 가장 가까운 것을 기억해 둔다.
+                if (distance < nearestOutsideDistance)
+                {
+                    nearestOutsideDistance = distance;
+                    nearestOutside = spawner;
+                }
+
                 continue;
             }
 
@@ -304,7 +377,12 @@ public class ZombieSpawnManager : MonoBehaviour
         }
 
         List<ZombieSpawner> pool = hidden.Count > 0 ? hidden : visible;
-        return pool.Count > 0 ? pool[UnityEngine.Random.Range(0, pool.Count)] : null;
+        if (pool.Count > 0)
+        {
+            return pool[UnityEngine.Random.Range(0, pool.Count)];
+        }
+
+        return nearestOutside;
     }
 
     private static bool IsOnScreen(Camera view, Vector3 position)
@@ -332,10 +410,10 @@ public class ZombieSpawnManager : MonoBehaviour
         List<Vector3> points = new List<Vector3>();
 
         // 1차: 조건을 모두 지키며 찾는다. 2차: 조건을 조금 완화해서 부족한 만큼 채운다.
-        FindPoints(points, area, playerGround, _minDistanceFromPlayer, _minSpacing, _maxHeightDifference, 400);
-        if (points.Count < _spawnerCount)
+        FindPoints(points, area, playerGround, _minDistanceFromPlayer, _minSpacing, _maxHeightDifference, 1500);
+        if (points.Count < _spawnerCount / 2)
         {
-            FindPoints(points, area, playerGround, _minDistanceFromPlayer * 0.6f, _minSpacing * 0.5f, _maxHeightDifference * 2f, 400);
+            FindPoints(points, area, playerGround, _minDistanceFromPlayer * 0.6f, _minSpacing * 0.6f, _maxHeightDifference * 2f, 1000);
         }
 
         // 그래도 못 찾으면 처음 좀비들이 서 있던 자리를 쓴다.
@@ -363,7 +441,6 @@ public class ZombieSpawnManager : MonoBehaviour
     private void FindPoints(List<Vector3> points, Bounds area, Vector3 playerGround,
         float minDistance, float spacing, float maxHeightDiff, int attempts)
     {
-        float maxDistance = Mathf.Max(minDistance + 1f, _maxDistanceFromPlayer);
         NavMeshPath path = new NavMeshPath();
         Vector3 playerNavPosition = playerGround;
         if (ZombieNavMesh.IsAvailable
@@ -374,18 +451,15 @@ public class ZombieSpawnManager : MonoBehaviour
 
         for (int i = 0; i < attempts && points.Count < _spawnerCount; i++)
         {
-            // 플레이어 주변 고리 모양 범위에서 무작위로 고른다.
-            Vector2 direction = UnityEngine.Random.insideUnitCircle.normalized;
-            if (direction.sqrMagnitude < 0.01f)
-            {
-                continue;
-            }
+            // 맵 전체에서 고르게 고른다. (플레이어 시작 위치 근처는 제외)
+            Vector3 candidate = new Vector3(
+                UnityEngine.Random.Range(area.min.x + _mapEdgeMargin, area.max.x - _mapEdgeMargin),
+                playerGround.y,
+                UnityEngine.Random.Range(area.min.z + _mapEdgeMargin, area.max.z - _mapEdgeMargin));
 
-            float distance = Mathf.Sqrt(UnityEngine.Random.Range(minDistance * minDistance, maxDistance * maxDistance));
-            Vector3 candidate = playerGround + new Vector3(direction.x, 0f, direction.y) * distance;
-
-            if (candidate.x < area.min.x + _mapEdgeMargin || candidate.x > area.max.x - _mapEdgeMargin
-                || candidate.z < area.min.z + _mapEdgeMargin || candidate.z > area.max.z - _mapEdgeMargin)
+            Vector3 flat = candidate - playerGround;
+            flat.y = 0f;
+            if (flat.sqrMagnitude < minDistance * minDistance)
             {
                 continue;
             }
@@ -485,7 +559,8 @@ public class ZombieSpawnManager : MonoBehaviour
         return collider.GetComponentInParent<Zombie>() != null;
     }
 
-    // 씬의 고정 콜라이더(바닥, 건물 등)를 모두 감싸는 범위
+    // 씬의 고정 콜라이더(벽, 건물 등)를 모두 감싸는 범위
+    // 아주 넓고 납작한 바닥(지면 Plane 등)은 맵 크기를 부풀리므로 뺀다.
     private Bounds GetMapArea()
     {
         if (_areaSize.x > 0f && _areaSize.z > 0f)
@@ -494,10 +569,16 @@ public class ZombieSpawnManager : MonoBehaviour
         }
 
         bool found = false;
-        Bounds bounds = new Bounds(_player.position, Vector3.one);
+        Bounds bounds = new Bounds(_player.position, new Vector3(80f, 10f, 80f));
         foreach (Collider collider in FindObjectsByType<Collider>(FindObjectsSortMode.None))
         {
             if (collider.isTrigger || IsActor(collider) || collider.attachedRigidbody != null)
+            {
+                continue;
+            }
+
+            Vector3 size = collider.bounds.size;
+            if (size.y <= 1.01f && size.x * size.z > 2500f)
             {
                 continue;
             }
