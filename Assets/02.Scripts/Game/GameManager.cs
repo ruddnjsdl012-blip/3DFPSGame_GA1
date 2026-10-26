@@ -22,7 +22,7 @@ public class GameManager : MonoBehaviour
     [Tooltip("켜면 준비 2초 대신 3, 2, 1을 각각 1초 보여 줍니다.")]
     [SerializeField] private bool _useCountdown;
     [Header("승리 조건")]
-    [Tooltip("이 수만큼 좀비를 처치하면 승리한다. (스포너가 계속 좀비를 만든다)")]
+    [Tooltip("이 수만큼 좀비를 처치하거나, 도착 안전가옥에 들어가면 승리한다.")]
     [SerializeField, Min(1)] private int _targetKills = 50;
 
     private readonly HashSet<Zombie> _livingZombies = new HashSet<Zombie>();
@@ -143,6 +143,17 @@ public class GameManager : MonoBehaviour
         }
 
         ShowResult(GameState.GameOver, "게임 오버", Color.red);
+    }
+
+    // 플레이어가 도착 안전가옥에 들어오면 SafeRoomGoal이 부른다.
+    public void CompleteEscape()
+    {
+        if (_state != GameState.Playing)
+        {
+            return;
+        }
+
+        ShowResult(GameState.Clear, "탈출 성공!", Color.green);
     }
 
     // 스포너가 새로 만든 좀비를 등록한다.
