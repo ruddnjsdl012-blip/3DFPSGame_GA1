@@ -10,7 +10,7 @@ using UnityEngine.SceneManagement;
 
 namespace FreeModelsImportFixed20261026.Editor
 {
-    // Editor-only visual setup. Does not depend on, copy, or replace gameplay scripts.
+    // Editor setup for model visuals and the V6 combat/minimap connections.
     public static class FreeModelsImportFixedSetup
     {
         private const string Root = "Assets/FreeModels_ImportFixed_20261026";
@@ -126,11 +126,12 @@ namespace FreeModelsImportFixed20261026.Editor
                 if (addedBackground) AddBackground(scene, prefabs, arena, floorY);
                 if (viewCamera != null) ApplyFirstPersonModel(viewCamera, prefabs, "fps_rifle");
                 else Debug.LogWarning("[Free Models] 게임용 Camera를 찾지 못했습니다. MainCamera 태그를 확인하고 메뉴를 다시 실행하세요.");
+                if (viewCamera != null) FreeModelsCombatSetup.ApplyToScene(scene);
                 EditorSceneManager.MarkSceneDirty(scene);
                 AssetDatabase.SaveAssets();
                 Debug.Log(string.Format(
                     "[Free Models] 외형 적용 완료: Player {0}, Zombie {1}, Drum {2}, Box {3}. " +
-                    "캐릭터를 세우고 1인칭 총/팔 외형을 적용했습니다. 이동/발사/대미지/UI 코드는 유지했습니다. Ctrl+S로 저장하세요. Ctrl+Z로 되돌릴 수 있습니다.",
+                    "서 있는 캐릭터/1인칭 총/총구화염/좀비 피/미니맵 줌을 적용했습니다. Ctrl+S로 저장하세요. Ctrl+Z로 되돌릴 수 있습니다.",
                     players, zombies, drums, boxes));
                 Transform map = originalObjects.Find(t => t != null && t.name == "Map");
                 if (map != null && SceneView.lastActiveSceneView != null)
@@ -172,6 +173,7 @@ namespace FreeModelsImportFixed20261026.Editor
             try
             {
                 ApplyFirstPersonModel(camera, prefabs, id);
+                FreeModelsCombatSetup.ApplyToScene(scene, false);
                 EditorSceneManager.MarkSceneDirty(scene);
                 AssetDatabase.SaveAssets();
                 Undo.CollapseUndoOperations(group);

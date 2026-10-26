@@ -24,6 +24,7 @@
       "sha256": "91e3093e95427d59625e7e2ce2d0399b861600160fd0b4ada7714796b67cea8c"
     }
   ],
-  "scope": "Additive visual-only package. Does not contain or replace any original gameplay script. Background models have no new colliders. Character animation controllers are not connected.",
-  "derived_meshes": "Character standing poses, cropped/reposed FPS forearms, and gun axis conversion are baked offline. Original FBX is retained."
+  "scope": "V6: existing model visuals plus muzzle flash, blood and minimap zoom; four original scripts receive targeted hooks/UI methods while their GUIDs are preserved. Movement, damage values, firing stats and zombie FSM remain unchanged.",
+  "derived_meshes": "Character standing poses, cropped/reposed FPS forearms, and gun axis conversion are baked offline. Original FBX is retained.",
+  "effects": "Two procedural alpha particle masks generated for this project. No external VFX textures or plugins required."
 }
