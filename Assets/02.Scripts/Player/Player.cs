@@ -1,5 +1,5 @@
 using UnityEngine;
-
+using System;
 public class Player : MonoBehaviour, IDamageable
 {
     [Header("스탯")]
@@ -12,6 +12,8 @@ public class Player : MonoBehaviour, IDamageable
 
     public float MaxHealth => _maxHealth;
     public float Health => _health;
+    // Action자료형은 함수들을 저장 할 수 잇다.
+    public Action OnDamaged = null;
 
     private void Awake()
     {

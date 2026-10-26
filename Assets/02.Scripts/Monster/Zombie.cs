@@ -103,18 +103,18 @@ public class Zombie : MonoBehaviour, IDamageable
 
         _health = Mathf.Max(0f, _health - damageInfo.Value);
 
+        // World-space blood is also emitted on a killing hit and outlives the zombie.
+        if (_bloodSprayPrefab != null)
+        {
+            Vector3 normal = damageInfo.HitNormal.sqrMagnitude > 0.0001f
+                ? damageInfo.HitNormal.normalized : -transform.forward;
+            Instantiate(_bloodSprayPrefab, damageInfo.HitPoint + normal * 0.025f, Quaternion.LookRotation(normal));
+        }
+
         StopAllCoroutines();
 
         if (_health > 0f)
         {
-            // 좀비의 자식으로 블러드 스프레이를 생성! -> 위치 수정!
-            if (_bloodSprayPrefab != null)
-            {
-                GameObject bloodSpray = Instantiate(_bloodSprayPrefab, transform);
-                bloodSpray.transform.position = damageInfo.HitPoint;
-                bloodSpray.transform.forward = damageInfo.HitNormal;
-            }
-
             // 잠깐 멈칫 하고 싶다!
             Debug.Log($"{_state} -> Hit");
             _state = ZombieState.Hit;

@@ -1,9 +1,11 @@
 using System.Collections;
 using UnityEngine;
+using FreeModelsImportFixed20261026;
 
 public class PlayerGunFire : MonoBehaviour
 {
     [SerializeField] private ParticleSystem _hitEffectPrefab;
+    [SerializeField] private FreeModelsMuzzleFlash _muzzleFlash;
 
     [Header("스탯")]
     [SerializeField] private int _maxBulletCount = 30;
@@ -72,7 +74,12 @@ public class PlayerGunFire : MonoBehaviour
 
     private void Shoot()
     {
-        Transform cameraTransform = Camera.main.transform;
+        Camera viewCamera = Camera.main;
+        if (viewCamera == null) return;
+        if (_muzzleFlash == null)
+            _muzzleFlash = viewCamera.GetComponentInChildren<FreeModelsMuzzleFlash>(true);
+        if (_muzzleFlash != null) _muzzleFlash.PlayShot();
+        Transform cameraTransform = viewCamera.transform;
 
         Ray ray = new Ray(
             cameraTransform.position,
@@ -84,12 +91,14 @@ public class PlayerGunFire : MonoBehaviour
 
         if (isHit)
         {
-            // 맞은 자리에 이펙트를 표시한다.
-            ParticleSystem effect = Instantiate(_hitEffectPrefab);
-
-            effect.transform.position = hitInfo.point;
-            effect.transform.forward = hitInfo.normal;
-            effect.Play();
+            // Zombie.TakeDamage owns blood, including the killing hit.
+            Zombie hitZombie = hitInfo.collider.GetComponentInParent<Zombie>();
+            if (hitZombie == null && _hitEffectPrefab != null)
+            {
+                ParticleSystem effect = Instantiate(_hitEffectPrefab, hitInfo.point + hitInfo.normal * 0.015f,
+                    Quaternion.LookRotation(hitInfo.normal));
+                effect.Play();
+            }
 
             DamageInfo damageInfo = new DamageInfo();
             damageInfo.Value = _damage;
@@ -99,6 +108,7 @@ public class PlayerGunFire : MonoBehaviour
             // IDamageable이 있는 대상에게만 대미지를 전달한다.
             IDamageable damageable =
                 hitInfo.collider.GetComponent<IDamageable>();
+            if (damageable == null) damageable = hitInfo.collider.GetComponentInParent<IDamageable>();
 
             if (damageable != null)
             {
