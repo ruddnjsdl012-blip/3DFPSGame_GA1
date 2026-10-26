@@ -1,0 +1,23 @@
+{
+  "creator": "Kenney",
+  "license": "CC0-1.0",
+  "license_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+  "packs": [
+    {
+      "name": "City Kit Industrial 2.0",
+      "page": "https://kenney.nl/assets/city-kit-industrial",
+      "sha256": "5b381164e5760f3830a2dbee43b972deee38b2a695d091b56e238ab2910c96d2"
+    },
+    {
+      "name": "Survival Kit 2.0",
+      "page": "https://kenney.nl/assets/survival-kit",
+      "sha256": "c3586341b5932c87eb43d75d915434f47daed168b17ed36a03e8ca9977c7443e"
+    },
+    {
+      "name": "Animated Characters Survivors 1.1",
+      "page": "https://kenney.nl/assets/animated-characters-survivors",
+      "sha256": "fdadced07a0454c9b7f0b46507be6144a072b4d03b4ffa37f225893c76c62845"
+    }
+  ],
+  "scope": "Additive visual-only package. Does not contain or replace any original gameplay script. Background models have no new colliders. Character animation controllers are not connected."
+}
