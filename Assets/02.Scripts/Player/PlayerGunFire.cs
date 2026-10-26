@@ -30,9 +30,8 @@ public class PlayerGunFire : MonoBehaviour
 
         _fireTimer -= Time.deltaTime;
         // 마우스 왼쪽 버튼을 누르고 있으면 연속 발사한다.
-        if (Input.GetButton("Fire1")
-            && _fireTimer <= 0f
-            && _bulletCount > 0)
+        bool isMouseVisible = Cursor.visible;
+        if (!isMouseVisible && Input.GetButton("Fire1") && _fireTimer <= 0f)
         {
             _bulletCount--;
             _fireTimer = _fireInterval;
