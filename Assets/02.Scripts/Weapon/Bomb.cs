@@ -7,10 +7,21 @@ public class Bomb : MonoBehaviour
     [SerializeField] private float _explosionRange = 4.5f;
     [SerializeField] private float _damage = 100;
 
+    private bool _exploded;
+
 
     // 다른 콜라이더와 부딛힌 순간 실행되는 메서드
     private void OnCollisionEnter(Collision collision)
     {
+        // 여러 곳에 동시에 닿아도 한 번만 터진다.
+        if (_exploded)
+        {
+            return;
+        }
+
+        _exploded = true;
+        GameAudio.PlayAt("explosion", transform.position, 1f, 0.06f, 0f, 90f);
+
         ParticleSystem effect = Instantiate(_explosionEffectPrefab, transform.position, Quaternion.identity);
         effect.Play();
 

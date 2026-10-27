@@ -2,7 +2,7 @@ using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
 
-// 화면 우측 하단의 탄약 표시(현재 / 최대)와 화면 중앙의 재장전 UI.
+// 화면 우측 하단의 탄약 표시(탄창 / 예비 탄약)와 화면 중앙의 재장전 UI.
 // 씬에 따로 배치하지 않아도 PlayerGunFire가 플레이 시작 시 자동으로 만든다.
 // (빈 GameObject에 직접 붙여 두면 그 오브젝트를 사용한다.)
 [DisallowMultipleComponent]
@@ -30,6 +30,7 @@ public class UI_AmmoHud : MonoBehaviour
     private PlayerGunFire _gun;
     private int _current;
     private int _max = 1;
+    private int _reserve;
 
     // 연출 값 (UI 연출은 일시 정지 중에도 자연스럽게 끝나도록 unscaled 시간을 쓴다.)
     private float _punch;      // 발사/재장전 완료 시 숫자가 살짝 커졌다 돌아온다.
@@ -102,10 +103,12 @@ public class UI_AmmoHud : MonoBehaviour
         _gun.ReloadFinished += HandleReloadFinished;
         _gun.ReloadCanceled += HandleReloadCanceled;
         _gun.EmptyFired += HandleEmptyFired;
+        _gun.ReserveChanged += HandleReserveChanged;
 
         BuildIfNeeded();
         _current = _gun.BulletCount;
         _max = Mathf.Max(1, _gun.MaxBulletCount);
+        _reserve = _gun.ReserveAmmo;
         _hasLastReloading = false;
         RefreshAmmoText();
     }
@@ -122,6 +125,7 @@ public class UI_AmmoHud : MonoBehaviour
         _gun.ReloadFinished -= HandleReloadFinished;
         _gun.ReloadCanceled -= HandleReloadCanceled;
         _gun.EmptyFired -= HandleEmptyFired;
+        _gun.ReserveChanged -= HandleReserveChanged;
         _gun = null;
     }
 
@@ -136,6 +140,17 @@ public class UI_AmmoHud : MonoBehaviour
 
         _current = current;
         _max = Mathf.Max(1, max);
+        RefreshAmmoText();
+    }
+
+    private void HandleReserveChanged(int reserve)
+    {
+        if (reserve > _reserve)
+        {
+            _punch = 1f; // 탄약을 주웠을 때
+        }
+
+        _reserve = reserve;
         RefreshAmmoText();
     }
 
@@ -231,7 +246,15 @@ public class UI_AmmoHud : MonoBehaviour
 
         if (showPrompt)
         {
-            _promptText.text = IsEmpty ? "NO AMMO   [R] RELOAD" : "LOW AMMO   [R] RELOAD";
+            if (_reserve <= 0)
+            {
+                _promptText.text = IsEmpty ? "OUT OF AMMO   FIND AMMO" : "LAST MAGAZINE";
+            }
+            else
+            {
+                _promptText.text = IsEmpty ? "NO AMMO   [R] RELOAD" : "LOW AMMO   [R] RELOAD";
+            }
+
             Color color = IsEmpty ? _emptyColor : _lowColor;
             color.a = 0.35f + 0.65f * Mathf.Abs(Mathf.Sin(Time.unscaledTime * 4f));
             _promptText.color = color;
@@ -252,9 +275,10 @@ public class UI_AmmoHud : MonoBehaviour
             return;
         }
 
-        // 현재 탄약은 크게, 최대 탄약은 작고 흐리게 표시한다. 예) 24 / 30
-        string maxColor = ColorUtility.ToHtmlStringRGB(_subTextColor);
-        _ammoText.text = _current + "<size=50%><color=#" + maxColor + ">  / " + _max + "</color></size>";
+        // 탄창의 탄약은 크게, 예비 탄약은 작고 흐리게 표시한다. 예) 24 / 90
+        // 예비 탄약이 없으면 빨간색으로 표시한다.
+        string reserveColor = ColorUtility.ToHtmlStringRGB(_reserve > 0 ? _subTextColor : _emptyColor);
+        _ammoText.text = _current + "<size=50%><color=#" + reserveColor + ">  / " + _reserve + "</color></size>";
     }
 
     // ----- UI 생성 -----

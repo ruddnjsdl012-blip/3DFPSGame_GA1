@@ -68,6 +68,30 @@ public class ZombieSpawnManager : MonoBehaviour
     [Tooltip("호드 좀비를 한 마리씩 내보내는 간격(초)")]
     [SerializeField, Min(0.05f)] private float _hordeSpawnGap = 0.3f;
 
+    [Header("특수 좀비")]
+    [SerializeField] private bool _enableSpecials = true;
+    [Tooltip("게임 시작 후 이 시간(초)이 지나야 특수 좀비가 나온다.")]
+    [SerializeField, Min(0f)] private float _specialStartTime = 40f;
+    [Tooltip("좀비를 하나 만들 때 그 종류일 확률 (레벨 1 기준)")]
+    [SerializeField, Range(0f, 1f)] private float _runnerChance = 0.14f;
+    [SerializeField, Range(0f, 1f)] private float _boomerChance = 0.07f;
+    [SerializeField, Range(0f, 1f)] private float _spitterChance = 0.07f;
+    [Tooltip("레벨이 오를 때마다 특수 좀비 확률에 더하는 비율 (0.08 = 레벨마다 +8%)")]
+    [SerializeField, Min(0f)] private float _specialChancePerLevel = 0.08f;
+    [SerializeField, Min(0)] private int _maxBoomers = 2;
+    [SerializeField, Min(0)] private int _maxSpitters = 2;
+    [Tooltip("호드 좀비가 러너일 확률")]
+    [SerializeField, Range(0f, 1f)] private float _hordeRunnerChance = 0.3f;
+
+    [Header("탱크")]
+    [SerializeField] private bool _enableTank = true;
+    [Tooltip("게임 시작 후 첫 탱크가 나오는 시간(초)")]
+    [SerializeField, Min(10f)] private float _firstTankTime = 150f;
+    [Tooltip("탱크가 쓰러진 뒤 다음 탱크까지의 시간(초)")]
+    [SerializeField, Min(30f)] private float _tankInterval = 180f;
+
+    private readonly List<Zombie> _specials = new List<Zombie>();
+    private float _nextTankTime;
     private readonly List<ZombieSpawner> _spawners = new List<ZombieSpawner>();
     private readonly List<Zombie> _spawned = new List<Zombie>();
     private Zombie _template;
@@ -136,6 +160,7 @@ public class ZombieSpawnManager : MonoBehaviour
         CreateSpawners();
         _spawnTimer = _startDelay;
         _nextHordeTime = _firstHordeDelay;
+        _nextTankTime = _firstTankTime;
         _ready = _spawners.Count > 0;
     }
 
@@ -204,6 +229,7 @@ public class ZombieSpawnManager : MonoBehaviour
         }
 
         UpdateHorde(dt);
+        UpdateTank();
 
         _spawnTimer -= dt;
         if (_spawnTimer > 0f)
@@ -222,12 +248,8 @@ public class ZombieSpawnManager : MonoBehaviour
     // 일정 시간마다 좀비 무리를 짧은 간격으로 한꺼번에 내보낸다.
     private void UpdateHorde(float dt)
     {
-        if (_enableHorde == false)
-        {
-            return;
-        }
-
-        if (_hordeRemaining <= 0 && _elapsed >= _nextHordeTime)
+        // 호드를 꺼도 부머가 부른 무리(CallMob)는 나온다.
+        if (_enableHorde && _hordeRemaining <= 0 && _elapsed >= _nextHordeTime)
         {
             _hordeRemaining = _hordeBaseSize + _hordeSizePerLevel * (_level - 1);
             _hordeTimer = 0f;
@@ -257,6 +279,85 @@ public class ZombieSpawnManager : MonoBehaviour
         _hordeRemaining--;
     }
 
+    // 정해진 시간마다 탱크가 한 마리 나온다. (살아 있는 탱크가 있으면 쓰러진 뒤 간격을 다시 센다)
+    private void UpdateTank()
+    {
+        if (_enableTank == false)
+        {
+            return;
+        }
+
+        if (CountKind(ZombieKind.Tank) > 0)
+        {
+            _nextTankTime = Mathf.Max(_nextTankTime, _elapsed + _tankInterval);
+            return;
+        }
+
+        if (_elapsed < _nextTankTime)
+        {
+            return;
+        }
+
+        // 자리를 못 찾으면 2초 뒤에 다시 시도한다.
+        _nextTankTime = TrySpawn(true, ZombieKind.Tank) ? _elapsed + _tankInterval : _elapsed + 2f;
+    }
+
+    // 부머 냄새를 맡은 좀비 무리를 부른다. (호드처럼 짧은 간격으로 나온다)
+    public void CallMob(int count)
+    {
+        if (_ready == false || count <= 0)
+        {
+            return;
+        }
+
+        _hordeRemaining += count;
+        _hordeTimer = Mathf.Min(_hordeTimer, 0.6f);
+
+        UI_ZombieStatusHud hud = FindAnyObjectByType<UI_ZombieStatusHud>();
+        if (hud != null)
+        {
+            hud.ShowAlert("좀비들이 냄새를 맡았다!", "THE HORDE SMELLS YOU!", $"좀비 {count}마리가 몰려온다", $"{count} ZOMBIES INCOMING");
+        }
+    }
+
+    private ZombieKind PickKind(bool horde)
+    {
+        if (_enableSpecials == false || _elapsed < _specialStartTime)
+        {
+            return ZombieKind.Normal;
+        }
+
+        float boost = 1f + _specialChancePerLevel * (_level - 1);
+        if (horde)
+        {
+            return UnityEngine.Random.value < Mathf.Min(0.8f, _hordeRunnerChance * boost) ? ZombieKind.Runner : ZombieKind.Normal;
+        }
+
+        float runner = _runnerChance * boost;
+        float boomer = CountKind(ZombieKind.Boomer) < _maxBoomers ? _boomerChance * boost : 0f;
+        float spitter = CountKind(ZombieKind.Spitter) < _maxSpitters ? _spitterChance * boost : 0f;
+
+        float roll = UnityEngine.Random.value;
+        if (roll < runner) return ZombieKind.Runner;
+        roll -= runner;
+        if (roll < boomer) return ZombieKind.Boomer;
+        roll -= boomer;
+        if (roll < spitter) return ZombieKind.Spitter;
+        return ZombieKind.Normal;
+    }
+
+    private int CountKind(ZombieKind kind)
+    {
+        _specials.RemoveAll(zombie => zombie == null || zombie.IsDead);
+        int count = 0;
+        foreach (Zombie zombie in _specials)
+        {
+            if (zombie.Kind == kind) count++;
+        }
+
+        return count;
+    }
+
     private float CurrentSpawnInterval()
     {
         float interval = _spawnInterval * Mathf.Pow(_intervalMultiplierPerLevel, _level - 1);
@@ -281,13 +382,16 @@ public class ZombieSpawnManager : MonoBehaviour
 
     // ----- 좀비 생성 -----
 
-    private void TrySpawn(bool horde)
+    private bool TrySpawn(bool horde, ZombieKind? forcedKind = null)
     {
         ZombieSpawner spawner = PickSpawner(horde);
         if (spawner == null)
         {
-            return;
+            return false;
         }
+
+        ZombieKind kind = forcedKind ?? PickKind(horde);
+        float scale = ZombieVariants.GetScale(kind);
 
         // 스포너 반경 안에서 비어 있는 자리를 찾는다.
         for (int attempt = 0; attempt < 6; attempt++)
@@ -297,7 +401,7 @@ public class ZombieSpawnManager : MonoBehaviour
             Vector3 point = spawner.transform.position + new Vector3(offset.x, 0f, offset.y);
 
             if (TryGetGround(point, spawner.transform.position.y + 2f, out Vector3 ground) == false
-                || HasRoomFor(ground) == false)
+                || HasRoomFor(ground, scale) == false)
             {
                 continue;
             }
@@ -315,8 +419,14 @@ public class ZombieSpawnManager : MonoBehaviour
                 facePlayer = Quaternion.LookRotation(toPlayer);
             }
 
-            Zombie zombie = Instantiate(_template, ground + Vector3.up * (0.05f - _footOffset), facePlayer);
+            Zombie zombie = Instantiate(_template, ground + Vector3.up * (0.05f - _footOffset * scale), facePlayer);
             zombie.name = _template.name + "_Spawned";
+            ZombieVariants.Apply(zombie, kind); // 특수 좀비: 크기, 색, 스탯, 전용 행동
+            if (kind != ZombieKind.Normal)
+            {
+                _specials.Add(zombie);
+            }
+
             zombie.ApplyStatMultiplier(HealthMultiplier, DamageMultiplier);
             zombie.BeginHunt();
             _spawned.Add(zombie);
@@ -327,8 +437,10 @@ public class ZombieSpawnManager : MonoBehaviour
             }
 
             spawner.MarkUsed();
-            return;
+            return true;
         }
+
+        return false;
     }
 
     // 플레이어 현재 위치에서 적당히 떨어져 있고, 가능하면 화면에 보이지 않는 스포너를 고른다.
@@ -535,12 +647,14 @@ public class ZombieSpawnManager : MonoBehaviour
     }
 
     // 좀비 크기만큼 비어 있는지 확인한다.
-    private bool HasRoomFor(Vector3 ground)
+    private bool HasRoomFor(Vector3 ground, float scale = 1f)
     {
-        Vector3 bottom = ground + Vector3.up * (_clearRadius + 0.1f);
-        Vector3 top = ground + Vector3.up * Mathf.Max(_clearRadius + 0.1f, _clearHeight - _clearRadius);
+        float radius = _clearRadius * scale;
+        float height = _clearHeight * scale;
+        Vector3 bottom = ground + Vector3.up * (radius + 0.1f);
+        Vector3 top = ground + Vector3.up * Mathf.Max(radius + 0.1f, height - radius);
         // 벽, 상자, 다른 좀비, 플레이어 등 무엇이든 겹치면 안 된다.
-        return Physics.CheckCapsule(bottom, top, _clearRadius * 0.9f,
+        return Physics.CheckCapsule(bottom, top, radius * 0.9f,
             Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore) == false;
     }
 

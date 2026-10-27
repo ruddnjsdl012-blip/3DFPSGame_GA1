@@ -51,6 +51,23 @@ public class Zombie : MonoBehaviour, IDamageable
     public float MaxHealth => _maxHealth;
     public float Health => _health;
     public float AttackDamage => _attackDamage;
+    public float AttackRange => _attackRange;
+    public float MoveSpeed => _moveSpeed;
+    public ZombieState State => _state;
+    public bool IsDead => _state == ZombieState.Death;
+    public GameObject Target => _player;
+
+    // ----- 특수 좀비용 (ZombieVariants가 설정) -----
+    public ZombieKind Kind { get; private set; } = ZombieKind.Normal;
+    // 맞아도 멈칫하지 않는다. (탱크)
+    public bool IgnoreStagger { get; set; }
+    // 켜면 추격 중에도 제자리에 서서 플레이어를 바라본다. (스피터가 침을 뱉을 때)
+    public bool HoldPosition { get; set; }
+    // 죽었을 때 (부머 폭발, 탱크 보상 등)
+    public event System.Action<Zombie> Died;
+    // 근접 공격이 플레이어에게 맞았을 때 (탱크 넉백 등)
+    public event System.Action<Zombie, GameObject> AttackLanded;
+    private Vector3 _bodyScale = Vector3.one;
 
 
     private ZombieState _state = ZombieState.Idle;
@@ -59,12 +76,28 @@ public class Zombie : MonoBehaviour, IDamageable
     // Unity 객체를 쓰므로 필드 초기화가 아니라 Start에서 만든다.
     private ZombiePathFollower _pathFollower;
 
+    // 가끔 신음 소리를 낸다.
+    private float _groanTimer;
+
+    // 코드로 움직이는 애니메이션 (걷기, 공격, 피격, 쓰러짐)
+    private ZombieAnimator _animator;
+    private bool _attackWindup;
+
     private void Start()
     {
         CaptureBaseStats();
         _started = true;
         _health = _maxHealth;
         _pathFollower = new ZombiePathFollower();
+        _groanTimer = Random.Range(1.5f, 8f);
+
+        _animator = GetComponent<ZombieAnimator>();
+        if (_animator == null)
+        {
+            _animator = gameObject.AddComponent<ZombieAnimator>();
+        }
+
+        _animator.BodyScale = _bodyScale;
 
         _controller = GetComponent<CharacterController>();
         _startPosition = transform.position;
@@ -85,6 +118,8 @@ public class Zombie : MonoBehaviour, IDamageable
         {
             return;
         }
+
+        UpdateGroan();
 
         switch (_state)
         {
@@ -141,6 +176,25 @@ public class Zombie : MonoBehaviour, IDamageable
         _baseAttackDamage = _attackDamage;
     }
 
+    // 특수 좀비 스탯. 스폰 직후(Start 전, 난이도 배율 적용 전)에 부른다.
+    public void SetupVariant(ZombieKind kind, float healthMultiplier, float damageMultiplier, float speedMultiplier,
+        float rangeMultiplier, float intervalMultiplier, Vector3 bodyScale)
+    {
+        Kind = kind;
+        _maxHealth *= Mathf.Max(0.01f, healthMultiplier);
+        _attackDamage *= Mathf.Max(0f, damageMultiplier);
+        _moveSpeed *= Mathf.Max(0.05f, speedMultiplier);
+        _attackRange *= Mathf.Max(0.1f, rangeMultiplier);
+        _attackInterval *= Mathf.Max(0.1f, intervalMultiplier);
+        _bodyScale = bodyScale;
+        _baseCaptured = false; // 바뀐 값을 난이도 배율의 기준으로 삼는다.
+        if (_started)
+        {
+            _health = _maxHealth;
+            if (_animator != null) _animator.BodyScale = _bodyScale;
+        }
+    }
+
     // 대미지를 받는다.
     public void TakeDamage(DamageInfo damageInfo)
     {
@@ -166,8 +220,25 @@ public class Zombie : MonoBehaviour, IDamageable
 
         StopAllCoroutines();
 
-        if (_health > 0f)
+        // 총알(폭발)이 날아간 방향: 맞은 면의 반대쪽
+        Vector3 shotDirection = damageInfo.HitNormal.sqrMagnitude > 0.0001f
+            ? -damageInfo.HitNormal.normalized : -transform.forward;
+
+        if (_health > 0f && IgnoreStagger)
         {
+            // 멈칫하지 않고 계속 다가온다. (탱크)
+            if (_animator != null) _animator.PlayHit(shotDirection, 0.3f);
+            if (_state == ZombieState.Idle || _state == ZombieState.Comeback || _state == ZombieState.Hit)
+            {
+                _state = ZombieState.Trace;
+            }
+        }
+        else if (_health > 0f)
+        {
+            if (_animator != null) _animator.PlayHit(shotDirection);
+
+            GameAudio.PlayAt("zombie_hurt", transform.position + Vector3.up * 1.6f, 0.75f, 0.1f, 0.12f, 30f);
+
             // 잠깐 멈칫 하고 싶다!
             Debug.Log($"{_state} -> Hit");
             _state = ZombieState.Hit;
@@ -177,7 +248,20 @@ public class Zombie : MonoBehaviour, IDamageable
         {
             Debug.Log($"{_state} -> Death");
             _state = ZombieState.Death;
+            GameAudio.PlayAt("zombie_death", transform.position + Vector3.up * 1.4f, 0.9f, 0.08f, 0.1f, 35f);
+            if (_animator != null) _animator.PlayDeath(shotDirection);
+
+            // 쓰러진 좀비 위의 체력바는 숨긴다.
+            foreach (Canvas canvas in GetComponentsInChildren<Canvas>(true))
+            {
+                canvas.gameObject.SetActive(false);
+            }
+
             StartCoroutine(Death_Coroutine());
+
+            // 가끔 탄약/구급상자/수류탄을 떨어뜨린다.
+            PickupManager.OnZombieKilled(transform.position);
+            Died?.Invoke(this);
 
             if (GameManager.Instance != null)
             {
@@ -197,9 +281,32 @@ public class Zombie : MonoBehaviour, IDamageable
 
     private IEnumerator Death_Coroutine()
     {
+        // 시체는 길을 막지 않고 총알도 통과한다.
         _controller.enabled = false;
-        yield return new WaitForSecondsRealtime(0.5f);
+
+        // 쓰러지고 가라앉는 애니메이션이 끝난 뒤 지운다.
+        float wait = _animator != null ? _animator.DeathDuration : 0.5f;
+        yield return new WaitForSeconds(wait);
         Destroy(gameObject);
+    }
+
+    private void UpdateGroan()
+    {
+        if (_state == ZombieState.Death)
+        {
+            return;
+        }
+
+        _groanTimer -= Time.deltaTime;
+        if (_groanTimer > 0f)
+        {
+            return;
+        }
+
+        // 쫓아올 때는 더 자주 신음한다. 같은 소리가 겹치지 않게 전체에서 0.5초 간격을 둔다.
+        bool chasing = _state == ZombieState.Trace || _state == ZombieState.Attack;
+        _groanTimer = chasing ? Random.Range(2.5f, 6f) : Random.Range(5f, 11f);
+        GameAudio.PlayAt("zombie_groan", transform.position + Vector3.up * 1.6f, 0.7f, 0.1f, 0.5f, 30f);
     }
 
     // 대기: 제자리에서 플레이어를 기다린다.
@@ -211,6 +318,12 @@ public class Zombie : MonoBehaviour, IDamageable
         float distance = Vector3.Distance(transform.position, _player.transform.position);
         if (_isHunter || distance <= _detectDistance)
         {
+            // 플레이어를 발견하면 소리를 지른다. (가까이에서 발견한 좀비만)
+            if (distance < 25f)
+            {
+                GameAudio.PlayAt("zombie_alert", transform.position + Vector3.up * 1.6f, 0.85f, 0.1f, 0.6f, 40f);
+            }
+
             Debug.Log($"{_state} -> Trace");
             _state = ZombieState.Trace;
         }
@@ -235,8 +348,23 @@ public class Zombie : MonoBehaviour, IDamageable
         if (Vector3.Distance(transform.position, _player.transform.position) <= _attackRange)
         {
             _attackTimer = 0f;
+            _attackWindup = false;
             Debug.Log($"{_state} -> Attack");
             _state = ZombieState.Attack;
+            return;
+        }
+
+        // 제자리에서 플레이어를 바라본다. (스피터가 침을 뱉는 중)
+        if (HoldPosition)
+        {
+            Vector3 face = _player.transform.position - transform.position;
+            face.y = 0f;
+            if (face.sqrMagnitude > 0.01f)
+            {
+                transform.rotation = Quaternion.RotateTowards(transform.rotation, Quaternion.LookRotation(face), _turnSpeed * Time.deltaTime);
+            }
+
+            _controller.SimpleMove(Vector3.zero);
             return;
         }
 
@@ -288,11 +416,28 @@ public class Zombie : MonoBehaviour, IDamageable
             return;
         }
 
+        // 공격하는 동안에도 플레이어 쪽을 바라본다.
+        Vector3 toPlayer = _player.transform.position - transform.position;
+        toPlayer.y = 0f;
+        if (toPlayer.sqrMagnitude > 0.01f)
+        {
+            transform.rotation = Quaternion.RotateTowards(transform.rotation, Quaternion.LookRotation(toPlayer), _turnSpeed * Time.deltaTime);
+        }
+
         _attackTimer += Time.deltaTime;
+
+        // 때리기 직전에 덮치는 동작을 시작한다.
+        if (_attackWindup == false && _attackTimer >= _attackInterval - 0.15f)
+        {
+            _attackWindup = true;
+            if (_animator != null) _animator.PlayAttack();
+        }
+
         if (_attackTimer >= _attackInterval)
         {
-            // Todo. 공격 애니메이션 실행
+            _attackWindup = false;
 
+            GameAudio.PlayAt("zombie_attack", transform.position + Vector3.up * 1.5f, 0.85f, 0.1f, 0.15f, 25f);
 
             if (_player.TryGetComponent(out IDamageable damageable))
             {
@@ -304,6 +449,7 @@ public class Zombie : MonoBehaviour, IDamageable
                 };
 
                 damageable.TakeDamage(info);
+                AttackLanded?.Invoke(this, _player);
             }
 
             _attackTimer = 0f;

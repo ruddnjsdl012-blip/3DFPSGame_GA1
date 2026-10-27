@@ -10,7 +10,13 @@ namespace FreeModelsImportFixed20261026
         [SerializeField] private ParticleSystem _smoke;
         [SerializeField] private Light _flashLight;
         [SerializeField, Min(0.01f)] private float _lightDuration = 0.045f;
+        [Header("총구 섬광 (주변을 밝히는 빛)")]
+        [SerializeField, Min(0f)] private float _flashIntensity = 3.2f;
+        [SerializeField, Range(0f, 1f)] private float _flashIntensityJitter = 0.35f;
+        [SerializeField, Min(0.1f)] private float _flashRange = 8f;
         private float _lightUntil;
+        private float _lightStart;
+        private float _lightPeak;
 
         private void OnEnable()
         {
@@ -25,8 +31,13 @@ namespace FreeModelsImportFixed20261026
             Emit(_smoke, 1);
             if (_flashLight != null)
             {
+                // 발사마다 세기를 조금씩 다르게 해서 번쩍임이 살아 있게 한다.
+                _lightPeak = _flashIntensity * Random.Range(1f - _flashIntensityJitter, 1f + _flashIntensityJitter);
+                _flashLight.range = _flashRange * Random.Range(0.85f, 1.15f);
+                _flashLight.intensity = _lightPeak;
                 _flashLight.enabled = true;
-                _lightUntil = Time.unscaledTime + _lightDuration;
+                _lightStart = Time.unscaledTime;
+                _lightUntil = _lightStart + _lightDuration;
             }
         }
 
@@ -39,8 +50,16 @@ namespace FreeModelsImportFixed20261026
 
         private void Update()
         {
-            if (_flashLight != null && _flashLight.enabled && Time.unscaledTime >= _lightUntil)
+            if (_flashLight == null || _flashLight.enabled == false) return;
+            if (Time.unscaledTime >= _lightUntil)
+            {
                 _flashLight.enabled = false;
+                return;
+            }
+
+            // 켜진 순간 가장 밝고 빠르게 어두워진다.
+            float t = Mathf.InverseLerp(_lightStart, _lightUntil, Time.unscaledTime);
+            _flashLight.intensity = _lightPeak * (1f - t * t);
         }
 
         private void OnDisable()

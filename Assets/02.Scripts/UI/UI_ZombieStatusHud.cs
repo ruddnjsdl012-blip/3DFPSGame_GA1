@@ -79,6 +79,19 @@ public class UI_ZombieStatusHud : MonoBehaviour
         }
     }
 
+    // 특수 좀비 등장 같은 알림을 화면 가운데 위쪽에 띄운다. (한글 글꼴이 없으면 영어로)
+    public void ShowAlert(string korean, string english, string subKorean, string subEnglish)
+    {
+        if (_alertText == null)
+        {
+            return;
+        }
+
+        _alertText.text = _korean ? korean : english;
+        _alertSubText.text = _korean ? subKorean : subEnglish;
+        _alertTimer = _alertDuration;
+    }
+
     private void HandleHordeStarted(int count)
     {
         if (_alertText == null)

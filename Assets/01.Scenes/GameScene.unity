@@ -6002,6 +6002,9 @@ MonoBehaviour:
   _smoke: {fileID: 1167132170}
   _flashLight: {fileID: 2085010169}
   _lightDuration: 0.045
+  _flashIntensity: 3.2
+  _flashIntensityJitter: 0.35
+  _flashRange: 8
 --- !u!1 &259371724
 GameObject:
   m_ObjectHideFlags: 0

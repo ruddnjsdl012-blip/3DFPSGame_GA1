@@ -1,3 +1,4 @@
+using Input = GameInput;
 using UnityEngine;
 
 public class PlayerMove : MonoBehaviour
@@ -11,6 +12,11 @@ public class PlayerMove : MonoBehaviour
     private float _stamina = 0f;
 
     public float Stamina => _stamina;
+
+    // 정조준 중에는 천천히 걷고 달릴 수 없다. (PlayerAim이 설정)
+    public float SpeedMultiplier { get; set; } = 1f;
+    public bool SprintBlocked { get; set; }
+    public bool IsSprinting { get; private set; }
 
     [Header("스탯")]
     [SerializeField] private float _moveSpeed = 7f;
@@ -72,7 +78,9 @@ public class PlayerMove : MonoBehaviour
         float requiredStamina = _sprintCost * Time.deltaTime;
 
         bool isSprint = (Input.GetKey(KeyCode.LeftShift) || Input.GetKey(KeyCode.RightShift))
-                        && _stamina > requiredStamina;
+                        && _stamina > requiredStamina
+                        && SprintBlocked == false;
+        IsSprinting = isSprint && direction.sqrMagnitude > 0.01f;
 
         float currentSpeed = _moveSpeed;
 
@@ -92,7 +100,7 @@ public class PlayerMove : MonoBehaviour
                 _stamina + _staminaRecovery * Time.deltaTime);
         }
 
-        Vector3 velocity = direction * currentSpeed;
+        Vector3 velocity = direction * (currentSpeed * Mathf.Max(0f, SpeedMultiplier));
         velocity.y = _yVelocity;
 
         _characterController.Move(velocity * Time.deltaTime);

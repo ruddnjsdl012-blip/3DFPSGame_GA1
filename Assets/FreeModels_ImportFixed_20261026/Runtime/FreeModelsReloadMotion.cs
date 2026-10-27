@@ -182,7 +182,16 @@ namespace FreeModelsImportFixed20261026
 
         private Timeline Current => _emptyReload ? EmptyTimeline : TacticalTimeline;
 
-        private void Awake() { CaptureRestPose(); }
+        private void Awake()
+        {
+            CaptureRestPose();
+
+            // 효과음 칸이 비어 있으면 기본 효과음(Resources/ZombieAudio)을 쓴다.
+            if (_magOutClip == null) _magOutClip = Resources.Load<AudioClip>("ZombieAudio/reload_mag_out");
+            if (_magInClip == null) _magInClip = Resources.Load<AudioClip>("ZombieAudio/reload_mag_in");
+            if (_boltPullClip == null) _boltPullClip = Resources.Load<AudioClip>("ZombieAudio/reload_bolt_pull");
+            if (_boltReleaseClip == null) _boltReleaseClip = Resources.Load<AudioClip>("ZombieAudio/reload_bolt_release");
+        }
 
         private bool CaptureRestPose()
         {
@@ -645,7 +654,7 @@ namespace FreeModelsImportFixed20261026
                     _audio.spatialBlend = 0f;
                 }
             }
-            _audio.PlayOneShot(clip, _volume);
+            _audio.PlayOneShot(clip, _volume * GameAudio.MasterVolume);
         }
 
         // ----- 스프링 -----

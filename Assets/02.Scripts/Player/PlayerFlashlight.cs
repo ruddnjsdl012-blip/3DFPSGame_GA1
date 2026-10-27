@@ -1,3 +1,4 @@
+using Input = GameInput;
 using UnityEngine;
 
 // 카메라에 붙이는 손전등. F키로 켜고 끈다.

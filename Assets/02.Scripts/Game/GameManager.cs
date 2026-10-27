@@ -1,3 +1,4 @@
+using Input = GameInput;
 using System.Collections;
 using System.Collections.Generic;
 using TMPro;
@@ -25,7 +26,11 @@ public class GameManager : MonoBehaviour
     [Tooltip("이 수만큼 좀비를 처치하거나, 도착 안전가옥에 들어가면 승리한다.")]
     [SerializeField, Min(1)] private int _targetKills = 50;
 
+    // 다시 시작할 때는 시작 화면을 건너뛴다. (씬을 다시 불러와도 유지되는 값)
+    private static bool _skipTitle;
+
     private readonly HashSet<Zombie> _livingZombies = new HashSet<Zombie>();
+    private bool _gameBegun;
     private GameState _state = GameState.Ready;
     private bool _restarting;
     private int _killCount;
@@ -35,11 +40,23 @@ public class GameManager : MonoBehaviour
     public int KillCount => _killCount;
     public int TargetKills => _targetKills;
 
+    // 상태가 바뀔 때 (메뉴가 일시 정지/결과 화면을 띄울 때 쓴다)
+    public event System.Action<GameState> StateChanged;
+
+    // 켜져 있으면 일시 정지 키(Esc, P)와 일시 정지 화면을 메뉴(UI_GameMenu)가 맡는다.
+    public bool MenuHandlesPause { get; set; }
+
+    // 결과 화면 문구와 색 (게임 오버 / 승리! / 탈출 성공!)
+    public string ResultMessage { get; private set; }
+    public Color ResultColor { get; private set; } = Color.white;
+
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
     private static void ResetStatics()
     {
         _instance = null;
+        _skipTitle = false;
         Time.timeScale = 1f;
+        AudioListener.pause = false;
     }
 
     private void Awake()
@@ -82,6 +99,49 @@ public class GameManager : MonoBehaviour
             new GameObject("ZombieSpawnManager").AddComponent<ZombieSpawnManager>();
         }
 
+        // 환경음, 호드/승리/패배 음악
+        if (FindAnyObjectByType<GameAudioDirector>() == null)
+        {
+            new GameObject("GameAudioDirector").AddComponent<GameAudioDirector>();
+        }
+
+        // 탄약/구급상자/수류탄 보급품
+        if (FindAnyObjectByType<PickupManager>() == null)
+        {
+            new GameObject("PickupManager").AddComponent<PickupManager>();
+        }
+
+        // 시작 화면/일시 정지/설정 메뉴
+        UI_GameMenu menu = FindAnyObjectByType<UI_GameMenu>();
+        if (menu == null)
+        {
+            menu = UI_GameMenu.Create();
+        }
+
+        if (_skipTitle || menu.ShowTitleOnStart == false)
+        {
+            _skipTitle = false;
+            BeginGame();
+        }
+        else
+        {
+            // 시작 화면에서 '게임 시작'을 누르면 BeginGame()이 불린다.
+            _stateText.gameObject.SetActive(false);
+            SetHint(null);
+            _cursorManager.UnlockCursor();
+            menu.OpenTitle();
+        }
+    }
+
+    // 준비 → 시작! 연출 후 게임을 시작한다. (시작 화면의 '게임 시작' 버튼)
+    public void BeginGame()
+    {
+        if (_gameBegun || _state != GameState.Ready)
+        {
+            return;
+        }
+
+        _gameBegun = true;
         _cursorManager.LockCursor();
         StartCoroutine(StartSequence_Coroutine());
     }
@@ -98,7 +158,7 @@ public class GameManager : MonoBehaviour
             return;
         }
 
-        if (Input.GetKeyDown(KeyCode.P))
+        if (MenuHandlesPause == false && Input.GetKeyDown(KeyCode.P))
         {
             TogglePause();
         }
@@ -184,11 +244,24 @@ public class GameManager : MonoBehaviour
     private void ShowResult(GameState state, string message, Color color)
     {
         StopAllCoroutines();
+        ResultMessage = message;
+        ResultColor = color;
         ChangeState(state);
         Time.timeScale = 0f;
-        ShowMessage(message, color);
-        _restartButton.gameObject.SetActive(true);
-        SetHint("R키로도 다시 시작할 수 있습니다");
+
+        // 메뉴가 있으면 메뉴의 결과 화면(기록 + 버튼)을 쓴다.
+        if (MenuHandlesPause)
+        {
+            _stateText.gameObject.SetActive(false);
+            SetHint(null);
+        }
+        else
+        {
+            ShowMessage(message, color);
+            _restartButton.gameObject.SetActive(true);
+            SetHint("R키로도 다시 시작할 수 있습니다");
+        }
+
         _cursorManager.UnlockCursor();
     }
 
@@ -198,13 +271,19 @@ public class GameManager : MonoBehaviour
         {
             ChangeState(GameState.Pause);
             Time.timeScale = 0f;
-            ShowMessage("일시 정지", Color.white);
-            SetHint("P키: 계속 하기");
+            AudioListener.pause = true; // 게임 소리도 멈춘다.
+            if (MenuHandlesPause == false)
+            {
+                ShowMessage("일시 정지", Color.white);
+                SetHint("P키: 계속 하기");
+            }
+
             _cursorManager.UnlockCursor();
         }
         else if (_state == GameState.Pause)
         {
             Time.timeScale = 1f;
+            AudioListener.pause = false;
             ChangeState(GameState.Playing);
             _stateText.gameObject.SetActive(false);
             SetHint(null);
@@ -221,11 +300,49 @@ public class GameManager : MonoBehaviour
         }
 
         _restarting = true;
+        _skipTitle = true;
         StopAllCoroutines();
         _restartButton.interactable = false;
         Time.timeScale = 1f;
+        AudioListener.pause = false;
         _cursorManager.LockCursor();
         SceneManager.LoadScene(SceneManager.GetActiveScene().path);
+    }
+
+    // 메뉴에서 다시 시작 (일시 정지 중에도 가능). 시작 화면은 건너뛴다.
+    public void RestartFromMenu()
+    {
+        ReloadScene(true);
+    }
+
+    // 시작 화면으로 돌아간다.
+    public void ReturnToTitle()
+    {
+        ReloadScene(false);
+    }
+
+    private void ReloadScene(bool skipTitle)
+    {
+        if (_restarting)
+        {
+            return;
+        }
+
+        _restarting = true;
+        _skipTitle = skipTitle;
+        StopAllCoroutines();
+        Time.timeScale = 1f;
+        AudioListener.pause = false;
+        SceneManager.LoadScene(SceneManager.GetActiveScene().path);
+    }
+
+    public void QuitGame()
+    {
+#if UNITY_EDITOR
+        UnityEditor.EditorApplication.isPlaying = false;
+#else
+        Application.Quit();
+#endif
     }
 
     private void ShowMessage(string message, Color color)
@@ -255,6 +372,7 @@ public class GameManager : MonoBehaviour
     {
         Debug.Log($"게임 상태: {_state} -> {nextState}");
         _state = nextState;
+        StateChanged?.Invoke(nextState);
     }
 
     private void OnDestroy()

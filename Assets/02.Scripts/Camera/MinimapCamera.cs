@@ -1,3 +1,4 @@
+using Input = GameInput;
 using System;
 using UnityEngine;
 
