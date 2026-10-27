@@ -1,4 +1,4 @@
-# Unity C# 코드 리뷰 기준
+﻿# Unity C# 코드 리뷰 기준
 
 ## 리뷰 원칙
 
@@ -26,7 +26,7 @@
 * `data`, `value`, `temp`, `manager`처럼 의미가 지나치게 넓은 이름이 남용되지 않았는지 확인한다.
 * `bool` 변수는 상태를 자연스럽게 읽을 수 있는 이름인지 확인한다.
 
-  * 예: `isDead`, `canAttack`, `hasTarget`
+    * 예: `isDead`, `canAttack`, `hasTarget`
 * 메서드 이름은 수행하는 동작을 동사 형태로 명확하게 표현하는지 확인한다.
 
 ### 매직 넘버를 사용하고 있지 않은가?

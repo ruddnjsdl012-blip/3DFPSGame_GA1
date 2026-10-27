@@ -65,8 +65,7 @@ public class Drum : MonoBehaviour, IDamageable
     {
         // 0. 주위에 있는 드럼통들을 모두 찾는다.
         // Physics.OverlapSpere(원점, 반지름, 찾을 레이어들)
-        Collider[] colliders =
-            Physics.OverlapSphere(transform.position, _explosionRange, LayerMask.GetMask("Drum", "Zombie"));
+        Collider[] colliders = Physics.OverlapSphere(transform.position, _explosionRange, LayerMask.GetMask("Drum", "Zombie"));
 
         // 1. 드럼통과 좀비들에게 대미지를 준다.
         foreach (Collider col in colliders)
@@ -74,7 +73,7 @@ public class Drum : MonoBehaviour, IDamageable
             DamageInfo damageInfo = new()
             {
                 Value = _damage,
-                HitPoint = col.ClosestPoint(transform.position), // 폭발 중심에서 가장 가까운 콜라이더 표면 위치
+                HitPoint = col.ClosestPoint(transform.position),  // 폭발 중심에서 가장 가까운 콜라이더 표면 위치
                 HitNormal = (transform.position - col.ClosestPoint(transform.position)).normalized
             };
 

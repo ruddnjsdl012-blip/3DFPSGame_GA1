@@ -1,4 +1,4 @@
-root = true
+﻿root = true
 
 # 게임 코드에만 적용한다. Unity가 생성하는 스크립트/외부 코드는 대상이 아니다.
 [Assets/02.Scripts/**.cs]

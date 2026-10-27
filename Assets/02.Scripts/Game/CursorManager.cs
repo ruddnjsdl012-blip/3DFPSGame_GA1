@@ -1,4 +1,3 @@
-using Input = GameInput;
 using UnityEngine;
 
 // 마우스 커서를 화면 가운데에 잠그고 숨긴다.
@@ -9,6 +8,7 @@ public class CursorManager : MonoBehaviour
         LockCursor();
     }
 
+
     private void Update()
     {
         if (GameManager.Instance.State != GameState.Playing) return;
@@ -17,11 +17,13 @@ public class CursorManager : MonoBehaviour
         {
             UnlockCursor();
         }
-        else if (Input.GetKeyDown(KeyCode.RightAlt))
+        else if (Input.GetKeyUp(KeyCode.LeftAlt))
         {
             LockCursor();
         }
     }
+
+
 
     public void LockCursor()
     {

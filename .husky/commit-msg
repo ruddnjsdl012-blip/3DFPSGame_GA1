@@ -19,6 +19,8 @@
 ## or put your custom commands -------------------
 #echo 'Husky.Net is awesome!'
 
+echo commit-msg
+
 grep -qE '^(asset|build|chore|ci|docs|feat|fix|perf|refactor|revert|style|test)(\(.+\))?!?: .+' "$1" && exit 0
 echo "커밋 메시지는 'type: 설명' 형식이어야 합니다."
 exit 1

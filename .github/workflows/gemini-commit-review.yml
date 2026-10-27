@@ -1,4 +1,4 @@
-name: Gemini Commit Review
+﻿name: Gemini Commit Review
 
 on:
   push:

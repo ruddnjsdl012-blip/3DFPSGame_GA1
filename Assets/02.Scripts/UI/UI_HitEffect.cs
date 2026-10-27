@@ -3,82 +3,84 @@ using UnityEngine;
 using UnityEngine.UI;
 
 [RequireComponent(typeof(Image))]
-[DisallowMultipleComponent]
 public class UI_HitEffect : MonoBehaviour
 {
-    [SerializeField, Range(0f, 1f)] private float _maxAlpha = 0.4f;
-    [SerializeField, Min(0f)] private float _fadeTime = 0.3f;
+    [SerializeField] private float _flashTime = 0.06f;
+    [SerializeField] private float _fadeTime = 0.3f;
 
     private Image _image;
-    private Coroutine _fadeCoroutine;
 
     private void Awake()
     {
         _image = GetComponent<Image>();
-        _image.raycastTarget = false;
-        SetAlpha(0f);
+        _image.enabled = false;
     }
 
-    public void Play()
+    private void Start()
     {
-        if (isActiveAndEnabled == false || _image == null)
+        Player player = GameObject.FindAnyObjectByType<Player>();
+        if (player != null)
         {
-            return;
+            player.OnDamaged += OnPlayerDamaged;
         }
+    }
 
-        if (_fadeCoroutine != null)
-        {
-            StopCoroutine(_fadeCoroutine);
-            _fadeCoroutine = null;
-        }
+    private void OnPlayerDamaged()
+    {
+        Fade(0.6f);
+    }
 
-        if (_fadeTime <= 0f)
-        {
-            SetAlpha(0f);
-            return;
-        }
 
-        _fadeCoroutine = StartCoroutine(Fade_Coroutine());
+    public void Flash(float alpha)
+    {
+        SetAlpha(alpha);
+
+        StartCoroutine(Flash_Coroutine());
+    }
+
+    private IEnumerator Flash_Coroutine()
+    {
+        _image.enabled = true;
+
+        yield return new WaitForSeconds(_flashTime);
+
+        _image.enabled = false;
+    }
+
+    public void Fade(float alpha)
+    {
+        SetAlpha(alpha);
+
+        StartCoroutine(Fade_Coroutine());
+        // 2. 0.4에서 서서히 0으로 가서 사라지게 한다.
     }
 
     private IEnumerator Fade_Coroutine()
     {
-        float elapsed = 0f;
-        SetAlpha(_maxAlpha);
+        _image.enabled = true;
 
-        while (elapsed < _fadeTime)
+        float elpasedTime = 0f;
+
+        float startAlpha = _image.color.a;
+
+        while (elpasedTime < _fadeTime)
         {
-            yield return null;
+            float alpha = Mathf.Lerp(startAlpha, 0f, elpasedTime / _fadeTime);
 
-            elapsed += Time.unscaledDeltaTime;
-            SetAlpha(Mathf.Lerp(_maxAlpha, 0f, elapsed / _fadeTime));
+            SetAlpha(alpha);
+
+            elpasedTime += Time.deltaTime;
+            yield return null; // 한 프레임씩 쉰다!
         }
 
         SetAlpha(0f);
-        _fadeCoroutine = null;
+        _image.enabled = false;
     }
 
     private void SetAlpha(float alpha)
     {
-        if (_image == null)
-        {
-            return;
-        }
-
         Color color = _image.color;
         color.a = alpha;
         _image.color = color;
-        _image.enabled = alpha > 0f;
-    }
-
-    private void OnDisable()
-    {
-        if (_fadeCoroutine != null)
-        {
-            StopCoroutine(_fadeCoroutine);
-            _fadeCoroutine = null;
-        }
-
-        SetAlpha(0f);
     }
 }

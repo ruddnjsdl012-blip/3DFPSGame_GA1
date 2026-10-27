@@ -1,66 +1,59 @@
-using Input = GameInput;
-using System;
 using UnityEngine;
 
-// The existing 0/9 shortcuts and UI buttons share clamped orthographic zoom.
-[RequireComponent(typeof(Camera))]
+
+// 미니맵 카메라: 플레이어 머리 위에서 아래를 내려다보며 따라다닌다.
 public class MinimapCamera : MonoBehaviour
 {
+    private const float ZoomStep = 1f;
+
     private Camera _camera;
+
     [SerializeField] private Transform _target;
     [SerializeField] private float _height = 8f;
-    [Header("미니맵 줌")]
-    [SerializeField, Min(0.1f)] private float _minZoom = 2f;
-    [SerializeField, Min(0.1f)] private float _maxZoom = 40f;
-    [SerializeField, Min(0.1f)] private float _zoomStep = 2f;
+    [SerializeField] private float _minZoom = 3f;
+    [SerializeField] private float _maxZoom = 20f;
 
-    public event Action<float> ZoomChanged;
-    public float CurrentZoom { get { return GetCamera().orthographicSize; } }
-    public bool CanZoomIn { get { return CurrentZoom > MinimumZoom + 0.001f; } }
-    public bool CanZoomOut { get { return CurrentZoom < MaximumZoom - 0.001f; } }
-    private float MinimumZoom { get { return Mathf.Max(0.1f, _minZoom); } }
-    private float MaximumZoom { get { return Mathf.Max(MinimumZoom, _maxZoom); } }
 
-    private Camera GetCamera()
+    private void Start()
     {
-        if (_camera == null) _camera = GetComponent<Camera>();
-        return _camera;
+        _camera = GetComponent<Camera>();
     }
 
-    private void Awake()
-    {
-        GetCamera().orthographic = true;
-        SetZoom(CurrentZoom);
-    }
 
     private void Update()
     {
-        if (Input.GetKeyDown(KeyCode.Alpha0)) ZoomIn();
-        else if (Input.GetKeyDown(KeyCode.Alpha9)) ZoomOut();
+        if (Input.GetKeyDown(KeyCode.Alpha0))
+        {
+            ZoomIn();
+        }
+        else if (Input.GetKeyDown(KeyCode.Alpha9))
+        {
+            ZoomOut();
+        }
     }
 
-    public void ZoomIn() { SetZoom(CurrentZoom - Mathf.Max(0.1f, _zoomStep)); }
-    public void ZoomOut() { SetZoom(CurrentZoom + Mathf.Max(0.1f, _zoomStep)); }
-
-    public void SetZoom(float size)
+    public void ZoomIn()
     {
-        if (float.IsNaN(size) || float.IsInfinity(size)) return;
-        Camera camera = GetCamera();
-        camera.orthographicSize = Mathf.Clamp(size, MinimumZoom, MaximumZoom);
-        ZoomChanged?.Invoke(camera.orthographicSize);
+        SetZoom(_camera.orthographicSize - ZoomStep);
+    }
+
+    public void ZoomOut()
+    {
+        SetZoom(_camera.orthographicSize + ZoomStep);
+    }
+
+    private void SetZoom(float size)
+    {
+        _camera.orthographicSize = Mathf.Clamp(size, _minZoom, _maxZoom);
     }
 
     private void LateUpdate()
     {
-        if (_target == null) return;
-        transform.position = _target.position + Vector3.up * _height;
-        transform.eulerAngles = new Vector3(90f, _target.eulerAngles.y, 0f);
+        // 1. 대상의 머리 위로 위치를 옮긴다.
+        transform.position = _target.position + (Vector3.up * _height);
+
+        // 2. 아래를 보되, 대상이 쳐다보는 방향으로 카메라도 회전한다.
+        transform.eulerAngles = new Vector3(90, _target.eulerAngles.y, 0f);
     }
 
-    private void OnValidate()
-    {
-        _minZoom = Mathf.Max(0.1f, _minZoom);
-        _maxZoom = Mathf.Max(_minZoom, _maxZoom);
-        _zoomStep = Mathf.Max(0.1f, _zoomStep);
-    }
 }
