@@ -1,4 +1,4 @@
-# 재생 및 맵 복구 패키지
+# 재생 및 맵 복구 패키지 — 입력 축 누락 수정
 
 사용자가 올린 `test(20261027-035937).unitypackage`를 기준으로 수정했습니다.
 
@@ -9,6 +9,18 @@
 3. Unity를 다시 열고 컴파일이 끝나면 `Tools > Zombie Game > Repair Play and Map`을 실행합니다.
 4. `Assets/01.Scenes/GameScene.unity`가 열렸는지 확인한 뒤 Play를 누릅니다.
 5. 시작 화면의 게임 시작 버튼을 선택합니다.
+
+## Mouse X / Mouse Y / Fire1 is not setup 오류
+
+이번 수정본에는 `Tools > Zombie Game > Repair Input Axes` 메뉴를 추가했습니다.
+Play를 종료하고 이 메뉴를 실행한 뒤 Console을 Clear하고 다시 Play하세요.
+맵 복구를 다시 실행할 필요 없이 입력 설정만 복구할 수 있습니다.
+
+- `Mouse X`, `Mouse Y`, `Horizontal`, `Vertical`, `Fire1`, `Fire2`, `Jump`, `Submit`, `Cancel` 중 없는 이름을 등록합니다.
+- 기존 입력 항목과 감도, 키 바인딩은 유지합니다. 다시 실행해도 같은 항목을 중복 추가하지 않습니다.
+- 마우스 축은 Mouse Movement로 등록하고 X/Y축을 각각 지정합니다. 이동은 WASD/방향키, 발사는 마우스 왼쪽, 점프는 Space입니다.
+- 변경 전 `ProjectSettings/InputManager.asset`을 `ZombieRepairBackups` 안에 복사합니다.
+- 기존 `Repair Play and Map` 메뉴도 같은 입력 복구를 수행합니다.
 
 ## 변경
 

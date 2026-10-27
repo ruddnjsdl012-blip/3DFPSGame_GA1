@@ -13,6 +13,11 @@ using UnityEngine.SceneManagement;
 public static class ZombieProjectRepair
 {
     private const string GameScene = "Assets/01.Scenes/GameScene.unity";
+    private const string InputSettingsPath = "ProjectSettings/InputManager.asset";
+    private static readonly string[] RequiredInputAxes =
+    {
+        "Mouse X", "Mouse Y", "Horizontal", "Vertical", "Fire1", "Fire2", "Jump", "Submit", "Cancel"
+    };
     private static readonly string[] MaterialFolders =
     {
         "Assets/ZombieCity/Materials",
@@ -60,6 +65,8 @@ public static class ZombieProjectRepair
         AudioListener.pause = false;
         EditorApplication.isPaused = false;
 
+        int addedInputAxes = EnsureInputAxes(backup);
+        if (addedInputAxes < 0) return;
         int repairedMaterials = RepairMaterials(backup);
         int reimportedModels = RepairMissingModelMeshes(scene);
         int remainingMissing = CountMissingMeshes(scene);
@@ -78,11 +85,104 @@ public static class ZombieProjectRepair
             Selection.activeGameObject = player.gameObject;
         }
 
-        string result = $"[Zombie Repair] GameScene 실행 경로 복구. 재질 {repairedMaterials}개, 모델 재임포트 {reimportedModels}개.";
+        string result = $"[Zombie Repair] GameScene 실행 경로 복구. 입력 축 추가 {addedInputAxes}개, 재질 {repairedMaterials}개, 모델 재임포트 {reimportedModels}개.";
         if (remainingMissing > 0)
             Debug.LogWarning(result + $" 메시가 없는 오브젝트 {remainingMissing}개는 원본 모델 파일을 확인해야 합니다.", sceneAsset);
         else
             Debug.Log(result + " Play를 누르고 게임 시작 버튼을 선택하세요.", sceneAsset);
+    }
+
+    [MenuItem("Tools/Zombie Game/Repair Input Axes", false, 2)]
+    public static void RepairInputAxes()
+    {
+        if (EditorApplication.isPlayingOrWillChangePlaymode || EditorApplication.isCompiling)
+        {
+            Debug.LogWarning("[Zombie Repair] Play 모드를 종료하고 컴파일이 끝난 뒤 실행하세요.");
+            return;
+        }
+
+        string backup = Path.Combine("ZombieRepairBackups", DateTime.Now.ToString("yyyyMMdd_HHmmss_fff"));
+        int added = EnsureInputAxes(backup);
+        if (added >= 0)
+            Debug.Log($"[Zombie Repair] 필수 입력 축 9개 확인 완료. 누락된 축 {added}개를 추가했습니다. Console을 Clear한 뒤 Play를 실행하세요.");
+    }
+
+    // GameInput uses these virtual axes when the legacy backend is enabled.
+    // Add only missing names: retain all existing bindings, sensitivities and joystick axes.
+    private static int EnsureInputAxes(string backup)
+    {
+        UnityEngine.Object[] assets = AssetDatabase.LoadAllAssetsAtPath(InputSettingsPath);
+        if (assets.Length == 0)
+        {
+            Debug.LogError("[Zombie Repair] ProjectSettings/InputManager.asset을 읽을 수 없습니다. 프로젝트 루트의 설정 파일을 확인하세요.");
+            return -1;
+        }
+
+        SerializedObject settings = new SerializedObject(assets[0]);
+        settings.Update();
+        SerializedProperty axes = settings.FindProperty("m_Axes");
+        if (axes == null || !axes.isArray)
+        {
+            Debug.LogError("[Zombie Repair] Input Manager의 m_Axes 배열을 찾을 수 없습니다.");
+            return -1;
+        }
+
+        HashSet<string> names = new HashSet<string>(StringComparer.Ordinal);
+        for (int i = 0; i < axes.arraySize; i++)
+            names.Add(axes.GetArrayElementAtIndex(i).FindPropertyRelative("m_Name").stringValue);
+
+        bool missing = false;
+        foreach (string name in RequiredInputAxes)
+            if (!names.Contains(name)) missing = true;
+        if (!missing) return 0;
+
+        string backupPath = Path.Combine(backup, InputSettingsPath);
+        Directory.CreateDirectory(Path.GetDirectoryName(backupPath));
+        File.Copy(InputSettingsPath, backupPath, true);
+
+        int added = 0;
+        added += AddInputAxis(axes, names, "Mouse X", type: 1, axis: 0, gravity: 0f, sensitivity: 0.1f, dead: 0f);
+        added += AddInputAxis(axes, names, "Mouse Y", type: 1, axis: 1, gravity: 0f, sensitivity: 0.1f, dead: 0f);
+        added += AddInputAxis(axes, names, "Horizontal", "left", "right", "a", "d", gravity: 3f, sensitivity: 3f, snap: true);
+        added += AddInputAxis(axes, names, "Vertical", "down", "up", "s", "w", gravity: 3f, sensitivity: 3f, snap: true);
+        added += AddInputAxis(axes, names, "Fire1", positive: "left ctrl", altPositive: "mouse 0");
+        added += AddInputAxis(axes, names, "Fire2", positive: "left alt", altPositive: "mouse 1");
+        added += AddInputAxis(axes, names, "Jump", positive: "space");
+        added += AddInputAxis(axes, names, "Submit", positive: "return", altPositive: "joystick button 0");
+        added += AddInputAxis(axes, names, "Cancel", positive: "escape", altPositive: "joystick button 1");
+
+        settings.ApplyModifiedPropertiesWithoutUndo();
+        EditorUtility.SetDirty(assets[0]);
+        AssetDatabase.SaveAssets();
+        return added;
+    }
+
+    private static int AddInputAxis(SerializedProperty axes, HashSet<string> names, string name,
+        string negative = "", string positive = "", string altNegative = "", string altPositive = "",
+        int type = 0, int axis = 0, float gravity = 1000f, float sensitivity = 1000f,
+        float dead = 0.001f, bool snap = false)
+    {
+        if (!names.Add(name)) return 0;
+
+        int index = axes.arraySize;
+        axes.InsertArrayElementAtIndex(index);
+        SerializedProperty entry = axes.GetArrayElementAtIndex(index);
+        entry.FindPropertyRelative("m_Name").stringValue = name;
+        entry.FindPropertyRelative("descriptiveName").stringValue = string.Empty;
+        entry.FindPropertyRelative("descriptiveNegativeName").stringValue = string.Empty;
+        entry.FindPropertyRelative("negativeButton").stringValue = negative;
+        entry.FindPropertyRelative("positiveButton").stringValue = positive;
+        entry.FindPropertyRelative("altNegativeButton").stringValue = altNegative;
+        entry.FindPropertyRelative("altPositiveButton").stringValue = altPositive;
+        entry.FindPropertyRelative("gravity").floatValue = gravity;
+        entry.FindPropertyRelative("dead").floatValue = dead;
+        entry.FindPropertyRelative("sensitivity").floatValue = sensitivity;
+        entry.FindPropertyRelative("snap").boolValue = snap;
+        entry.FindPropertyRelative("invert").boolValue = false;
+        entry.FindPropertyRelative("type").intValue = type;
+        entry.FindPropertyRelative("axis").intValue = axis;
+        entry.FindPropertyRelative("joyNum").intValue = 0;
+        return 1;
     }
 
     private static int RepairMaterials(string backup)
