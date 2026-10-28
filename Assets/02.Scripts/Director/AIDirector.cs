@@ -363,6 +363,18 @@ public class AIDirector : MonoBehaviour
         look.y = 0f;
         Quaternion rotation = look.sqrMagnitude > 0.01f ? Quaternion.LookRotation(look) : Quaternion.identity;
         Zombie zombie = Instantiate(_zombiePrefab, hit.position + Vector3.up, rotation);
+
+        // NavMesh 위에 정확히 올려 두고, 끼면 빼 주는 도우미를 붙인다.
+        NavMeshAgent agent = zombie.GetComponent<NavMeshAgent>();
+        if (agent != null)
+        {
+            agent.Warp(hit.position);
+        }
+
+        if (zombie.GetComponent<ZombieUnstuck>() == null)
+        {
+            zombie.gameObject.AddComponent<ZombieUnstuck>();
+        }
         if (hunt)
         {
             zombie.BeginHunt();
