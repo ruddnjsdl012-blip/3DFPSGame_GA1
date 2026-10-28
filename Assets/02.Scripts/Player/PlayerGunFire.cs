@@ -18,12 +18,19 @@ public class PlayerGunFire : MonoBehaviour
     private int _bulletCount = 0;
     private Coroutine _reloadCoroutine = null;
     private Animator _animator;  // 군인 모델의 애니메이터
+    private GunFeedback _feedback;  // 반동, 카메라 흔들림, 총구 화염, 총소리
 
 
     private void Awake()
     {
         _bulletCount = _maxBulletCount;
         _animator = GetComponentInChildren<Animator>();
+
+        _feedback = GetComponent<GunFeedback>();
+        if (_feedback == null)
+        {
+            _feedback = gameObject.AddComponent<GunFeedback>();
+        }
     }
 
 
@@ -41,6 +48,7 @@ public class PlayerGunFire : MonoBehaviour
             _bulletCount--;
             _fireTimer = _fireInterval;
             Shoot();
+            _feedback.OnShot();
 
             // 서 있을 때(MoveMotion이 0)만 쏘는 동작을 한다.
             if (_animator.GetFloat("MoveMotion") == 0f)
@@ -59,6 +67,12 @@ public class PlayerGunFire : MonoBehaviour
             }
         }
 
+        // 총알이 없는데 쏘려고 하면 '딸깍'
+        if (!isMouseVisible && Input.GetButtonDown("Fire1") && _bulletCount <= 0)
+        {
+            GameSounds.Play2D("gun_empty", 0.8f);
+        }
+
         // 2. R키 누르면 총알 재장전 시작
         if (Input.GetKeyDown(KeyCode.R) && _reloadCoroutine == null)
         {
@@ -70,7 +84,15 @@ public class PlayerGunFire : MonoBehaviour
     {
         Debug.Log("재장전 시작!");
 
-        yield return new WaitForSeconds(_reloadingTime);
+        // 탄창 빼기 → 넣기 → 장전 손잡이 소리를 재장전 시간에 맞춰 나눠 낸다.
+        GameSounds.Play2D("reload_mag_out", 0.8f);
+        yield return new WaitForSeconds(_reloadingTime * 0.45f);
+        GameSounds.Play2D("reload_mag_in", 0.85f);
+        yield return new WaitForSeconds(_reloadingTime * 0.3f);
+        GameSounds.Play2D("reload_bolt_pull", 0.8f);
+        yield return new WaitForSeconds(_reloadingTime * 0.15f);
+        GameSounds.Play2D("reload_bolt_release", 0.85f);
+        yield return new WaitForSeconds(_reloadingTime * 0.1f);
 
         _bulletCount = _maxBulletCount;
 
@@ -103,6 +125,10 @@ public class PlayerGunFire : MonoBehaviour
             effect.transform.position = hitInfo.point; // 맞은 자리
             effect.transform.forward = hitInfo.normal; // 수직 위치로 회전
             effect.Play();
+
+            // 맞은 소리: 좀비면 살, 아니면 벽/바닥
+            bool hitZombie = hitInfo.collider.GetComponentInParent<Zombie>() != null;
+            GameSounds.PlayAt(hitZombie ? "hit_flesh" : "impact_concrete", hitInfo.point, hitZombie ? 0.6f : 0.8f, 0.03f);
 
             // 대미지 구조체 만들기
             DamageInfo damageInfo = new DamageInfo();

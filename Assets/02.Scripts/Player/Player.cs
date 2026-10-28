@@ -25,6 +25,7 @@ public class Player : MonoBehaviour, IDamageable
         _health -= damageInfo.Value;
 
         OnDamaged?.Invoke();
+        GameSounds.Play2D("player_hurt", 0.8f, 0.08f);
 
         Debug.Log($"플레이어가 맞았다. 대미지 {damageInfo.Value}, 남은 체력 {_health}");
         if (_health <= 0f)

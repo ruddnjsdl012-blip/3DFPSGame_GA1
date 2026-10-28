@@ -7,7 +7,8 @@ public enum GameState
 {
     Ready,
     Playing,
-    GameOver
+    GameOver,
+    Clear       // 탈출 성공
 }
 
 public class GameManager : MonoBehaviour
@@ -52,13 +53,37 @@ public class GameManager : MonoBehaviour
 
     public void GameOver()
     {
+        if (_state == GameState.Clear)
+        {
+            return;  // 이미 탈출했다.
+        }
+
         _state = GameState.GameOver;
 
         _stateText.gameObject.SetActive(true);
         _stateText.text = "게임오버";
         _stateText.color = Color.red;
+        GameSounds.Play2D("sting_defeat", 0.8f, 0f);
 
         _playerAnimator.SetFloat("MoveMotion", 0f);  // 달리던 중이었어도 서 있는 동작으로 돌린다.
+    }
+
+    // 탈출 성공. 구조 헬기에 타면 AIDirector가 부른다.
+    public void GameClear()
+    {
+        if (_state != GameState.Playing)
+        {
+            return;
+        }
+
+        _state = GameState.Clear;
+
+        _stateText.gameObject.SetActive(true);
+        _stateText.text = "탈출 성공!";
+        _stateText.color = Color.green;
+        GameSounds.Play2D("sting_victory", 0.8f, 0f);
+
+        _playerAnimator.SetFloat("MoveMotion", 0f);
     }
 
 }

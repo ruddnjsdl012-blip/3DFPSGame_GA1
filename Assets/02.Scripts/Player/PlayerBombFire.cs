@@ -23,6 +23,7 @@ public class PlayerBombFire : MonoBehaviour
     {
         // 2. 발사 위치에서 수류탄 생성하기
         Bomb bomb = Instantiate(_bombPrefab, _firePoint.position, Quaternion.identity);
+        GameSounds.Play2D("bomb_throw", 0.7f);
 
         // 3. 생성된 수류탄을 시선 방향으로 던지기
         Rigidbody rigidbody = bomb.GetComponent<Rigidbody>();

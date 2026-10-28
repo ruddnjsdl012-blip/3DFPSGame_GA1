@@ -25,6 +25,13 @@ public class CameraRotate : MonoBehaviour
 
         // 4. 누적한 회전값을 카메라에 적용한다.
         transform.eulerAngles = new Vector3(_accumulationY, _accumulationX, 0f);
+    }
+
+    // 총 반동: pitch가 음수면 위로, yaw가 양수면 오른쪽으로 시점을 돌린다. (GunFeedback이 부른다)
+    public void AddRecoil(float pitch, float yaw)
+    {
+        _accumulationX += yaw;
+        _accumulationY = Mathf.Clamp(_accumulationY + pitch, -90, 90);
 
 
         /*// 3. 그 방향으로 회전 시킨다.

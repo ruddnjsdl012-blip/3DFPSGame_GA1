@@ -14,6 +14,9 @@ public class Bomb : MonoBehaviour
         ParticleSystem effect = Instantiate(_explosionEffectPrefab, transform.position, Quaternion.identity);
         effect.Play();
 
+        GameSounds.PlayAt("explosion", transform.position, 1f, 0f, 80f);
+        CameraShake.ShakeAt(transform.position, 0.7f, 25f);
+
         ApplyAreaDamage();
 
         // Todo. 오브젝트 풀링 적용

@@ -8385,6 +8385,7 @@ GameObject:
   - component: {fileID: 330585547}
   - component: {fileID: 330585548}
   - component: {fileID: 330585549}
+  - component: {fileID: 330585550}
   m_Layer: 0
   m_Name: Main Camera
   m_TagString: MainCamera
@@ -8536,6 +8537,27 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::CameraFollow
   _target: {fileID: 220785613}
+--- !u!114 &330585550
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 330585543}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 03baa8527fd3847132f54314f56e891f, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::PlayerFlashlight
+  _toggleKey: 102
+  _startOn: 0
+  _color: {r: 1, g: 0.95, b: 0.85, a: 1}
+  _intensity: 9
+  _range: 40
+  _spotAngle: 60
+  _innerSpotAngle: 30
+  _offset: {x: 0.18, y: -0.15, z: 0.25}
+  _followSpeed: 14
 --- !u!1001 &332519256
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -43145,6 +43167,68 @@ BoxCollider:
   serializedVersion: 3
   m_Size: {x: 0.049999997, y: 0.6749999, z: 0.049999997}
   m_Center: {x: 0, y: 0.33749995, z: 0.000000007450581}
+--- !u!1 &2033161486
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 2033161488}
+  - component: {fileID: 2033161487}
+  m_Layer: 0
+  m_Name: AIDirector
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!114 &2033161487
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2033161486}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: a1a4ac5809cf02138aeeeb258f27729c, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::AIDirector
+  _zombiePrefab: {fileID: 4444889684306087261, guid: 9a5937c3bbbb42447a4124038423fce5, type: 3}
+  _map: {fileID: 887425111}
+  _wanderers: 10
+  _spawnInterval: 2.5
+  _maxCommons: 14
+  _spawnMinDistance: 18
+  _spawnMaxDistance: 55
+  _peakIntensity: 0.75
+  _relaxTime: 18
+  _hordeInterval: {x: 55, y: 80}
+  _hordeSize: 16
+  _maxAlive: 32
+  _finaleTime: 100
+  _finaleMaxAlive: 40
+  _finaleSpawnInterval: 1.2
+  _swarmInterval: 25
+  _swarmSize: 20
+  _extractionRadius: 5
+--- !u!4 &2033161488
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2033161486}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &2034139425
 GameObject:
   m_ObjectHideFlags: 0
@@ -44956,7 +45040,7 @@ MonoBehaviour:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 7001000001}
-  m_Enabled: 1
+  m_Enabled: 0
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 7c3e1a5b9d2f4e6a8b0c1d2e3f4a5b6c, type: 3}
   m_Name: 
@@ -45144,7 +45228,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!224 &8001000002
 RectTransform:
   m_ObjectHideFlags: 0
@@ -45484,3 +45568,4 @@ SceneRoots:
   - {fileID: 7001000003}
   - {fileID: 1168165025}
   - {fileID: 887425112}
+  - {fileID: 2033161488}

@@ -33,6 +33,9 @@ public class Zombie : MonoBehaviour, IDamageable
     [SerializeField] private float _maxHealth = 30;
     [SerializeField] private float _health;
 
+    [Tooltip("켜면 거리와 상관없이 처음부터 플레이어를 끝까지 쫓는다.")]
+    [SerializeField] private bool _alwaysChase = true;
+
     [Header("이펙트")]
     [SerializeField] private GameObject _bloodSprayPrefab;
 
@@ -41,6 +44,9 @@ public class Zombie : MonoBehaviour, IDamageable
     private GameObject _player;
     private NavMeshAgent _agent;
     private Animator _animator;
+
+    // AI 디렉터가 만든 좀비는 거리와 상관없이 플레이어를 끝까지 쫓는다. (L4D 호드)
+    private bool _isHunter = false;
 
 
     public float MaxHealth => _maxHealth;
@@ -63,6 +69,7 @@ public class Zombie : MonoBehaviour, IDamageable
         _animator = GetComponentInChildren<Animator>();
 
         _startPosition = transform.position;
+        _groanTimer = UnityEngine.Random.Range(1f, 6f);
 
         // 게임을 시작하면 플레이어를 찾는다.
         _player = GameObject.FindGameObjectWithTag("Player");
@@ -72,6 +79,8 @@ public class Zombie : MonoBehaviour, IDamageable
     private void Update()
     {
         if (GameManager.Instance.State != GameState.Playing) return;
+
+        UpdateGroan();
 
         switch (_state)
         {
@@ -116,6 +125,7 @@ public class Zombie : MonoBehaviour, IDamageable
             // 잠깐 멈칫 하고 싶다!
             Debug.Log($"{_state} -> Hit");
             _animator.SetTrigger("Hit");
+            GameSounds.PlayAt("zombie_hurt", transform.position, 0.7f, 0.1f);
             _state = ZombieState.Hit;
             StartCoroutine(Hit_Coroutine());
         }
@@ -123,6 +133,7 @@ public class Zombie : MonoBehaviour, IDamageable
         {
             Debug.Log($"{_state} -> Death");
             _animator.SetTrigger("Death");
+            GameSounds.PlayAt("zombie_death", transform.position, 0.9f, 0.1f);
             _state = ZombieState.Death;
             Died?.Invoke(this);
             StartCoroutine(Death_Coroutine());
@@ -154,8 +165,9 @@ public class Zombie : MonoBehaviour, IDamageable
 
         // 플레이어 가까워지면 Trace 상태로 전이한다.
         float distance = Vector3.Distance(transform.position, _player.transform.position);
-        if (distance <= _detectDistance)
+        if (_isHunter || _alwaysChase || distance <= _detectDistance)
         {
+            GameSounds.PlayAt("zombie_alert", transform.position, 0.8f, 0.5f);
             Debug.Log($"{_state} -> Trace");
             _animator.SetTrigger("IdleToMove");
             _state = ZombieState.Trace;
@@ -166,7 +178,7 @@ public class Zombie : MonoBehaviour, IDamageable
     private void Trace()
     {
         // 처음 자리에서 너무 멀어지면 돌아간다.
-        if (Vector3.Distance(transform.position, _startPosition) > _combackDistance)
+        if (_isHunter == false && _alwaysChase == false && Vector3.Distance(transform.position, _startPosition) > _combackDistance)
         {
             Debug.Log($"{_state} -> Comeback");
             _state = ZombieState.Comeback;
@@ -224,6 +236,7 @@ public class Zombie : MonoBehaviour, IDamageable
         if (_attackTimer >= _attackInterval)
         {
             _animator.SetTrigger("StartAttack");
+            GameSounds.PlayAt("zombie_attack", transform.position, 0.8f, 0.15f);
 
             _attackTimer = 0f;
         }
@@ -239,6 +252,32 @@ public class Zombie : MonoBehaviour, IDamageable
         };
 
         _player.GetComponent<IDamageable>().TakeDamage(info);
+    }
+
+    // 가끔 신음 소리를 낸다. (쫓아올 때 더 자주, 같은 소리가 겹치지 않게 전체에서 0.4초 간격)
+    private float _groanTimer;
+
+    private void UpdateGroan()
+    {
+        if (_state == ZombieState.Death)
+        {
+            return;
+        }
+
+        _groanTimer -= Time.deltaTime;
+        if (_groanTimer > 0f)
+        {
+            return;
+        }
+
+        _groanTimer = _state == ZombieState.Idle ? UnityEngine.Random.Range(5f, 11f) : UnityEngine.Random.Range(2.5f, 6f);
+        GameSounds.PlayAt("zombie_groan", transform.position, 0.7f, 0.4f);
+    }
+
+    // AI 디렉터가 부른다. 감지 거리와 복귀 거리를 무시하고 플레이어를 쫓는다.
+    public void BeginHunt()
+    {
+        _isHunter = true;
     }
 
     private void StopAgent()

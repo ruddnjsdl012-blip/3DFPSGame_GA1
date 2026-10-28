@@ -48,6 +48,9 @@ public class Drum : MonoBehaviour, IDamageable
         effect.transform.localScale = Vector3.one * 10f;
         effect.Play();
 
+        GameSounds.PlayAt("explosion", transform.position, 1f, 0f, 80f);
+        CameraShake.ShakeAt(transform.position, 0.7f, 25f);
+
         // 2. 위로 튀어오르며 빙글빙글 돈다.
         _rigidbody.AddForce(Vector3.up * _launchPower, ForceMode.Impulse);
         _rigidbody.AddTorque(UnityEngine.Random.insideUnitSphere * _spinPower, ForceMode.Impulse);
