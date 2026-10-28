@@ -43,6 +43,7 @@ public class FirstPersonBodyView : MonoBehaviour
     private float _kick;  // 0 ~ 1.6, 쏠 때 올라가고 빠르게 줄어든다.
     private float _kickRoll;
     private PlayerInventory _inventory;
+    private PlayerGrenade _grenade;
     private float _healBlend;
     private Animator _bodyAnimator;
     private Animator _viewAnimator;
@@ -64,6 +65,11 @@ public class FirstPersonBodyView : MonoBehaviour
 
     // 총구 화염을 붙일 1인칭 모델의 오른손
     public Transform ViewHand => _viewHand;
+
+    // 1인칭 모델 (GrenadeArmView가 복제해서 오른팔만 쓴다)
+    public Transform ViewRoot => _view;
+    public bool IsCalibrated => _view != null && _calibrateFrames <= 0;
+    public Vector3 NeutralLocalPosition => _baseOffset + _viewOffset;
 
     // 1인칭 총의 총구(총 끝) 위치. 아직 못 찾았으면 false
     public bool TryGetMuzzle(out Vector3 position)
@@ -202,6 +208,15 @@ public class FirstPersonBodyView : MonoBehaviour
         bool healing = _inventory != null && _inventory.IsHealing;
         _healBlend = Mathf.MoveTowards(_healBlend, healing ? 1f : 0f, Time.deltaTime * 4f);
         float heal = Mathf.SmoothStep(0f, 1f, _healBlend);
+
+        // 수류탄을 들면 총은 화면 아래로 완전히 내린다. (오른팔은 GrenadeArmView가 따로 보여 준다)
+        if (_grenade == null)
+        {
+            _grenade = GetComponent<PlayerGrenade>();
+        }
+
+        float grenade = _grenade != null ? Mathf.SmoothStep(0f, 1f, _grenade.EquipBlend) : 0f;
+        heal = Mathf.Max(heal, grenade * 2.2f);  // 치료 자세보다 더 많이 내린다.
 
         // 쏠 때 총이 뒤로 튀었다가 돌아온다.
         _kick = Mathf.Lerp(_kick, 0f, 1f - Mathf.Exp(-_kickReturn * Time.deltaTime));

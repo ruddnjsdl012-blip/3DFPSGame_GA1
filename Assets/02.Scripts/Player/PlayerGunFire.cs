@@ -27,6 +27,7 @@ public class PlayerGunFire : MonoBehaviour
     private GunFeedback _feedback;  // 반동, 카메라 흔들림, 총구 화염, 총소리
     private int _reserveAmmo = 0;
     private PlayerInventory _inventory;  // 보급품 (치료 중에는 쏠 수 없다)
+    private PlayerGrenade _grenade;      // 수류탄을 들고 있으면 쏠 수 없다. (4번 수류탄, 1번 총)
 
     // 총알 수가 바뀔 때 알려준다. (옵저버 패턴: UI_AmmoHud가 구독)
     public event Action OnAmmoChanged;
@@ -56,6 +57,13 @@ public class PlayerGunFire : MonoBehaviour
         {
             _inventory = gameObject.AddComponent<PlayerInventory>();
         }
+
+        // 수류탄 들기/던지기도 함께 붙인다.
+        _grenade = GetComponent<PlayerGrenade>();
+        if (_grenade == null)
+        {
+            _grenade = gameObject.AddComponent<PlayerGrenade>();
+        }
     }
 
 
@@ -81,6 +89,9 @@ public class PlayerGunFire : MonoBehaviour
 
         // 구급상자로 치료하는 동안에는 쏘거나 재장전할 수 없다.
         if (_inventory != null && _inventory.IsHealing) return;
+
+        // 수류탄을 들고 있으면 총은 쓰지 않는다. (왼쪽 클릭은 수류탄 던지기)
+        if (_grenade != null && _grenade.IsEquipped) return;
 
         // 0. 발사 타이머를 지난 시간만큼 줄인다.
         _fireTimer -= Time.deltaTime;

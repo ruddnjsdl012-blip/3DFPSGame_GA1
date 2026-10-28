@@ -100,7 +100,7 @@ public class UI_SupplyHud : MonoBehaviour
         int grenades = _inventory.Grenades;
         _medkit.text = $"<color=#FF5A50>+</color> 구급 {medkits}";
         _medkit.color = medkits > 0 ? Color.white : new Color(1f, 1f, 1f, 0.4f);
-        _grenade.text = $"수류탄 {grenades}/{_inventory.MaxGrenades}";
+        _grenade.text = $"[4] 수류탄 {grenades}/{_inventory.MaxGrenades}";
         _grenade.color = grenades > 0 ? new Color(0.75f, 1f, 0.6f) : new Color(1f, 1f, 1f, 0.4f);
         _healBar.SetActive(_inventory.IsHealing);
     }
