@@ -7,6 +7,13 @@ public class PlayerBombFire : MonoBehaviour
     [SerializeField] private Bomb _bombPrefab;
     [SerializeField] private float _throwPower = 15f;
 
+    private PlayerInventory _inventory;  // 수류탄 개수 (없으면 무제한)
+
+    private void Start()
+    {
+        _inventory = GetComponent<PlayerInventory>();
+    }
+
     private void Update()
     {
         if (GameManager.Instance.State != GameState.Playing) return;
@@ -14,7 +21,15 @@ public class PlayerBombFire : MonoBehaviour
         // 1. 마우스 오른쪽 버튼 입력 받기
         if (Input.GetButtonDown("Fire2"))
         {
-            Shoot();
+            // 치료 중에는 못 던지고, 수류탄이 있을 때만 하나 써서 던진다.
+            if (_inventory == null)
+            {
+                Shoot();
+            }
+            else if (!_inventory.IsHealing && _inventory.TryUseGrenade())
+            {
+                Shoot();
+            }
         }
 
     }

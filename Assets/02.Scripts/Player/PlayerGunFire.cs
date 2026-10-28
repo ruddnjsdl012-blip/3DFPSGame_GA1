@@ -1,3 +1,4 @@
+using System;
 using System.Collections;
 using UnityEngine;
 
@@ -14,16 +15,32 @@ public class PlayerGunFire : MonoBehaviour
     [SerializeField] private float _damage = 10f;            // 공격력
     [SerializeField] private float _fireInterval = 0.1f;     // 발사 속도
 
+    [Header("예비 총알 (탄창 밖에 가지고 다니는 총알)")]
+    [SerializeField] private int _startReserveAmmo = 120;    // 처음 가진 예비 총알
+    [SerializeField] private int _maxReserveAmmo = 240;      // 최대로 가질 수 있는 예비 총알
+
     private float _fireTimer = 0f;
     private int _bulletCount = 0;
     private Coroutine _reloadCoroutine = null;
     private Animator _animator;  // 군인 모델의 애니메이터
     private GunFeedback _feedback;  // 반동, 카메라 흔들림, 총구 화염, 총소리
+    private int _reserveAmmo = 0;
+    private PlayerInventory _inventory;  // 보급품 (치료 중에는 쏠 수 없다)
+
+    // 총알 수가 바뀔 때 알려준다. (옵저버 패턴: UI_AmmoHud가 구독)
+    public event Action OnAmmoChanged;
+
+    public int BulletCount => _bulletCount;          // 탄창 안의 총알
+    public int MaxBulletCount => _maxBulletCount;    // 탄창 크기
+    public int ReserveAmmo => _reserveAmmo;          // 예비 총알
+    public int MaxReserveAmmo => _maxReserveAmmo;    // 예비 총알 최대
+    public bool IsReloading => _reloadCoroutine != null;
 
 
     private void Awake()
     {
         _bulletCount = _maxBulletCount;
+        _reserveAmmo = Mathf.Clamp(_startReserveAmmo, 0, _maxReserveAmmo);
         _animator = GetComponentInChildren<Animator>();
 
         _feedback = GetComponent<GunFeedback>();
@@ -31,12 +48,38 @@ public class PlayerGunFire : MonoBehaviour
         {
             _feedback = gameObject.AddComponent<GunFeedback>();
         }
+
+        // 보급품(구급상자, 수류탄, 줍기)도 함께 붙인다.
+        _inventory = GetComponent<PlayerInventory>();
+        if (_inventory == null)
+        {
+            _inventory = gameObject.AddComponent<PlayerInventory>();
+        }
+    }
+
+
+    private void Start()
+    {
+        // 오른쪽 아래 총알 UI (현재 총알 / 예비 총알)
+        UI_AmmoHud.Create(this);
+    }
+
+    // 보급품(탄약 상자)에서 부른다. 실제로 받은 수를 돌려준다.
+    public int AddAmmo(int amount)
+    {
+        int add = Mathf.Clamp(amount, 0, _maxReserveAmmo - _reserveAmmo);
+        _reserveAmmo += add;
+        OnAmmoChanged?.Invoke();
+        return add;
     }
 
 
     private void Update()
     {
         if (GameManager.Instance.State != GameState.Playing) return;
+
+        // 구급상자로 치료하는 동안에는 쏘거나 재장전할 수 없다.
+        if (_inventory != null && _inventory.IsHealing) return;
 
         // 0. 발사 타이머를 지난 시간만큼 줄인다.
         _fireTimer -= Time.deltaTime;
@@ -46,6 +89,7 @@ public class PlayerGunFire : MonoBehaviour
         if (!isMouseVisible && Input.GetButton("Fire1") && _fireTimer <= 0f && _bulletCount > 0)
         {
             _bulletCount--;
+            OnAmmoChanged?.Invoke();
             _fireTimer = _fireInterval;
             Shoot();
             _feedback.OnShot();
@@ -65,6 +109,7 @@ public class PlayerGunFire : MonoBehaviour
                 _animator.SetBool("IsReloading", false);  // 재장전 동작을 멈춘다.
                 Debug.Log("재장전 취소!");
                 _reloadCoroutine = null;
+                OnAmmoChanged?.Invoke();
             }
         }
 
@@ -72,10 +117,17 @@ public class PlayerGunFire : MonoBehaviour
         if (!isMouseVisible && Input.GetButtonDown("Fire1") && _bulletCount <= 0)
         {
             GameSounds.Play2D("gun_empty", 0.8f);
+
+            // 예비 총알이 있으면 자동으로 재장전한다.
+            if (_reloadCoroutine == null && _reserveAmmo > 0)
+            {
+                _reloadCoroutine = StartCoroutine(Reloading_Coroutine());
+            }
         }
 
-        // 2. R키 누르면 총알 재장전 시작
-        if (Input.GetKeyDown(KeyCode.R) && _reloadCoroutine == null)
+        // 2. R키 누르면 총알 재장전 시작 (탄창이 덜 찼고 예비 총알이 있을 때만)
+        bool canReload = _bulletCount < _maxBulletCount && _reserveAmmo > 0;
+        if (Input.GetKeyDown(KeyCode.R) && _reloadCoroutine == null && canReload)
         {
             _reloadCoroutine = StartCoroutine(Reloading_Coroutine());
         }
@@ -85,6 +137,7 @@ public class PlayerGunFire : MonoBehaviour
     {
         Debug.Log("재장전 시작!");
         _animator.SetBool("IsReloading", true);  // 상체만 재장전 동작 (UpperBody 레이어)
+        OnAmmoChanged?.Invoke();  // UI에 '재장전 중' 표시
 
         // 탄창 빼기 → 넣기 → 장전 손잡이 소리를 재장전 시간에 맞춰 나눠 낸다.
         GameSounds.Play2D("reload_mag_out", 0.8f);
@@ -96,11 +149,15 @@ public class PlayerGunFire : MonoBehaviour
         GameSounds.Play2D("reload_bolt_release", 0.85f);
         yield return new WaitForSeconds(_reloadingTime * 0.1f);
 
-        _bulletCount = _maxBulletCount;
+        // 빈 만큼만 예비 총알에서 채운다.
+        int take = Mathf.Min(_maxBulletCount - _bulletCount, _reserveAmmo);
+        _bulletCount += take;
+        _reserveAmmo -= take;
 
         _animator.SetBool("IsReloading", false);
         Debug.Log("재장전 완료!");
         _reloadCoroutine = null;
+        OnAmmoChanged?.Invoke();
     }
 
 

@@ -21,7 +21,8 @@ public class GunFeedback : MonoBehaviour
     [Header("총구 화염")]
     [SerializeField] private Vector3 _fallbackMuzzleOffset = new Vector3(0.12f, -0.13f, 0.85f);  // 총을 못 찾았을 때 (카메라 기준)
     [SerializeField] private float _flashTime = 0.05f;
-    [SerializeField] private float _flashSize = 0.32f;
+    [SerializeField] private float _flashSize = 0.26f;
+    [SerializeField] private float _flashForward = 0.04f;  // 총 끝에서 이만큼 앞에 불꽃 가운데를 둔다.
     [SerializeField] private Color _flashColor = new Color(1f, 0.75f, 0.35f);
 
     [Header("소리")]
@@ -217,7 +218,11 @@ public class GunFeedback : MonoBehaviour
         if (_flashTimer <= 0f)
         {
             _flash.gameObject.SetActive(false);
+            return;
         }
+
+        // 불꽃이 켜져 있는 동안 총이 흔들려도 총 끝에 붙어 있게
+        _flash.position = MuzzlePosition();
     }
 
     // 총 끝 위치: 총 메시에서 시선 방향으로 가장 앞쪽 → 없으면 오른손 앞 → 없으면 카메라 기준 고정 위치
@@ -225,7 +230,13 @@ public class GunFeedback : MonoBehaviour
     {
         Transform cam = _camera.transform;
 
-        // 1인칭 모델(카메라에 붙은 군인)의 오른손 앞이 총구
+        // 1인칭 모델(카메라에 붙은 군인) 총의 진짜 총구 (총 메시에서 자동으로 찾은 점)
+        if (_bodyView != null && _bodyView.TryGetMuzzle(out Vector3 muzzle))
+        {
+            return muzzle + cam.forward * _flashForward;
+        }
+
+        // 아직 못 찾았으면 1인칭 모델의 오른손 앞
         if (_bodyView != null && _bodyView.ViewHand != null)
         {
             return _bodyView.ViewHand.position + cam.forward * 0.55f;

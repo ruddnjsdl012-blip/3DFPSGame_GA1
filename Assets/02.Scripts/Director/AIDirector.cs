@@ -138,6 +138,9 @@ public class AIDirector : MonoBehaviour
         _alarmClip = CreateAlarm();
 
         SpawnWanderers();
+
+        // 보급품 (탄약 더미, 구급상자, 수류탄)을 맵에 놓는다.
+        SupplySpawner.Create(_map, _radio);
     }
 
     private void Update()

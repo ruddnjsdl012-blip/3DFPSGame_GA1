@@ -12,10 +12,20 @@ public class Player : MonoBehaviour, IDamageable
 
     // Action 자료형: 함수(들)를 저장할 수 있다.
     public event Action OnDamaged = null;
+    public event Action OnHealed = null;   // 구급상자로 회복했을 때 (UI_PlayerStats가 구독)
 
     private void Start()
     {
         _health = _maxHealth;
+    }
+
+    // 체력 회복 (구급상자). 최대 체력을 넘지 않는다.
+    public void Heal(float amount)
+    {
+        if (_health <= 0f || amount <= 0f) return;
+
+        _health = Mathf.Min(_maxHealth, _health + amount);
+        OnHealed?.Invoke();
     }
 
     public void TakeDamage(DamageInfo damageInfo)

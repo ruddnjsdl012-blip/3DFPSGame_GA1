@@ -15,6 +15,7 @@ public class UI_PlayerStats : MonoBehaviour
     {
         // 플레이어 공격 이벤트 구독!
         _player.OnDamaged += RefreshHealth;
+        _player.OnHealed += RefreshHealth;  // 구급상자로 회복해도 다시 그린다.
     }
 
     // 업데이트가 초당 60회 이상은 실행인된다.
