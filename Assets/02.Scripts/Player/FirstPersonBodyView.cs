@@ -16,8 +16,11 @@ public class FirstPersonBodyView : MonoBehaviour
     [SerializeField] private Vector3 _viewOffset = Vector3.zero;
 
     [Header("재장전할 때 (동작이 화면 안에 들어오게 올리고 기울인다)")]
-    [SerializeField] private Vector3 _reloadOffset = new Vector3(0f, 0.12f, 0.05f);
-    [SerializeField] private Vector3 _reloadTilt = new Vector3(-18f, 0f, 0f);
+    [SerializeField] private Vector3 _reloadOffset = Vector3.zero;
+    [SerializeField] private Vector3 _reloadTilt = new Vector3(-8f, 0f, 0f);
+    [Tooltip("재장전하는 동안 오른손(총)을 붙잡아 둘 화면 속 자리 (카메라 기준). 손이 화면 밖으로 나가지 않게 모델을 따라 옮긴다.")]
+    [SerializeField] private Vector3 _reloadHandTarget = new Vector3(0.1f, -0.2f, 0.45f);
+    [SerializeField] private float _handFollowSpeed = 10f;
 
     [Header("달릴 때 흔들림")]
     [SerializeField] private float _bobAmount = 0.03f;
@@ -33,6 +36,8 @@ public class FirstPersonBodyView : MonoBehaviour
     private float _bobTime;
     private float _moveBlend;
     private Transform _viewHead;
+    private Vector3 _handFollow;
+    private bool _warned;
     private Renderer[] _viewRenderers;
     private int _calibrateFrames = 3;   // 몇 프레임 뒤 (서 있는 자세가 잡힌 뒤) 머리 위치를 재서 눈에 맞춘다.
 
@@ -115,7 +120,13 @@ public class FirstPersonBodyView : MonoBehaviour
         }
 
         // 몸의 애니메이터 값을 따라 한다. 1인칭 모델은 늘 서 있는 자세(MoveMotion 0)
-        bool reloading = HasParameter(_bodyAnimator, "IsReloading") && _bodyAnimator.GetBool("IsReloading");
+        bool hasReload = HasParameter(_bodyAnimator, "IsReloading");
+        bool reloading = hasReload && _bodyAnimator.GetBool("IsReloading");
+        if (!hasReload && !_warned && Input.GetKeyDown(KeyCode.R))
+        {
+            _warned = true;
+            Debug.LogWarning("[FirstPersonBodyView] PlayerAC에 IsReloading이 없습니다. 플레이를 멈추고 Tools > L4D 맵 > 재장전 동작 적용을 눌러 주세요.");
+        }
         if (HasParameter(_viewAnimator, "IsReloading"))
         {
             _viewAnimator.SetBool("IsReloading", reloading);
@@ -133,7 +144,21 @@ public class FirstPersonBodyView : MonoBehaviour
         _bobTime += Time.deltaTime * _bobSpeed * _moveBlend;
         Vector3 bob = new Vector3(Mathf.Sin(_bobTime) * _bobAmount, -Mathf.Abs(Mathf.Cos(_bobTime)) * _bobAmount, 0f) * _moveBlend;
 
-        _view.localPosition = _baseOffset + _viewOffset + _reloadOffset * reload + bob;
+        // 재장전 동작은 손을 아래로 내리므로, 오른손이 화면 속 정한 자리에 머물도록 모델을 따라 옮긴다.
+        if (_viewHand != null && _calibrateFrames <= 0)
+        {
+            if (reload > 0.01f)
+            {
+                Vector3 hand = _camera.InverseTransformPoint(_viewHand.position);
+                _handFollow += (_reloadHandTarget - hand) * Mathf.Clamp01(_handFollowSpeed * Time.deltaTime) * reload;
+            }
+            else
+            {
+                _handFollow = Vector3.MoveTowards(_handFollow, Vector3.zero, Time.deltaTime * 1.5f);
+            }
+        }
+
+        _view.localPosition = _baseOffset + _viewOffset + _reloadOffset * reload + _handFollow + bob;
         _view.localRotation = Quaternion.Euler(_reloadTilt * reload);
 
         Calibrate();
