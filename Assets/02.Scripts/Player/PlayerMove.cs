@@ -24,11 +24,13 @@ public class PlayerMove : MonoBehaviour
 
     [Header("컴포넌트")]
     [SerializeField] private CharacterController _characterController;
+    private Animator _animator;  // 군인 모델의 동작을 바꿔 주는 컴포넌트
 
     private void Awake()
     {
         _characterController = GetComponent<CharacterController>();
         _stamina = MaxStamina;
+        _animator = GetComponentInChildren<Animator>();  // 자식인 Model에 붙어 있다.
     }
 
     private void Update()
@@ -45,6 +47,7 @@ public class PlayerMove : MonoBehaviour
         // 2. 키보드 입력에 따라 방향을 구한다.
         Vector3 direction = new Vector3(h, 0, v);
         direction.Normalize(); // 대각선이어도 방향의 길이 1로 바꾸기 위해
+        _animator.SetFloat("MoveMotion", direction.magnitude);  // 움직이면 1, 멈추면 0
         // 캐릭터의 회전 방향을 기준으로 로컬 방향 벡터를 월드 방향 벡터로 변환한다.
         direction = transform.TransformDirection(direction);
         // 로컬 좌표계: 한 대상을 중심
