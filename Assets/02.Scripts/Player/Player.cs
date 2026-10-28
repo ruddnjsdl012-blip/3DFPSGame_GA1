@@ -14,7 +14,8 @@ public class Player : MonoBehaviour, IDamageable
     public event Action OnDamaged = null;
     public event Action OnHealed = null;   // 구급상자로 회복했을 때 (UI_PlayerStats가 구독)
 
-    private void Start()
+    // 체력은 Awake에서 채운다. (Start에서 채우면 UI가 먼저 체력을 읽어 0이나 반만 찬 막대가 보일 수 있다)
+    private void Awake()
     {
         _health = _maxHealth;
     }

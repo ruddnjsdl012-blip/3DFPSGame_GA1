@@ -16,6 +16,10 @@ public class UI_PlayerStats : MonoBehaviour
         // 플레이어 공격 이벤트 구독!
         _player.OnDamaged += RefreshHealth;
         _player.OnHealed += RefreshHealth;  // 구급상자로 회복해도 다시 그린다.
+
+        // 시작할 때 한 번 그린다. (안 그리면 슬라이더의 처음 값(0.5)이 그대로 보여 체력이 반만 차 보인다)
+        RefreshHealth();
+        _staminaSlider.value = _playerMove.Stamina / PlayerMove.MaxStamina;
     }
 
     // 업데이트가 초당 60회 이상은 실행인된다.

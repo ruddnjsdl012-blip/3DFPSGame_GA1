@@ -78,6 +78,12 @@ public class Zombie : MonoBehaviour, IDamageable
 
         _animator = GetComponentInChildren<Animator>();
 
+        // 맞거나 죽는 동작 중에 모델이 땅에 파묻히거나 미끄러지지 않게 모델 위치를 고정한다.
+        if (GetComponent<ZombieModelLock>() == null)
+        {
+            gameObject.AddComponent<ZombieModelLock>();
+        }
+
         _startPosition = transform.position;
         _groanTimer = UnityEngine.Random.Range(1f, 6f);
 

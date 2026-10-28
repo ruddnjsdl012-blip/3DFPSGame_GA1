@@ -85,7 +85,7 @@ public class SpecialZombie : MonoBehaviour
                 break;
 
             case SpecialType.Tank:
-                _zombie.SetupSpecial(700f, 6.2f, 30f, 2.6f, 1.6f, false);
+                _zombie.SetupSpecial(700f, 6.2f, 25f, 2.6f, 0.8f, false);  // 공격 간격 1.6초 → 0.8초 (대신 한 방 30 → 25)
                 transform.localScale *= 1.5f;
                 Tint(new Color(0.95f, 0.55f, 0.48f), 0.15f);
                 SetAnimatorSpeed(0.85f);
@@ -201,6 +201,12 @@ public class SpecialZombie : MonoBehaviour
 
     private void UpdateTank(float dt)
     {
+        // 휘두를 때는 동작을 빠르게, 걸을 때는 묵직하게
+        if (_animator != null)
+        {
+            _animator.speed = _zombie.State == ZombieState.Attack ? 1.7f : 0.9f;
+        }
+
         // 쿵쿵 걷는 소리와 땅 울림
         if (_agent.velocity.sqrMagnitude > 1f)
         {
