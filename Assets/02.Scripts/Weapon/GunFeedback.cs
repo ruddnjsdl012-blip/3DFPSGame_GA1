@@ -32,6 +32,7 @@ public class GunFeedback : MonoBehaviour
     private CameraShake _shake;
     private Camera _camera;
     private Renderer _gunRenderer;
+    private FirstPersonBodyView _bodyView;
     private Transform _rightHand;
 
     private float _pendingPitch;
@@ -60,6 +61,13 @@ public class GunFeedback : MonoBehaviour
 
         FindGun();
         BuildFlash();
+
+        // 1인칭에서 군인 몸이 화면을 가리지 않게 한다.
+        _bodyView = GetComponent<FirstPersonBodyView>();
+        if (_bodyView == null)
+        {
+            _bodyView = gameObject.AddComponent<FirstPersonBodyView>();
+        }
 
         // 발소리도 함께 붙인다.
         if (GetComponent<PlayerFootsteps>() == null)
@@ -107,6 +115,12 @@ public class GunFeedback : MonoBehaviour
 
         // 3. 총구 화염
         ShowFlash();
+
+        // 1인칭 모델의 쏘는 동작
+        if (_bodyView != null)
+        {
+            _bodyView.OnShot();
+        }
 
         // 4. 총소리
         GameSounds.Play2D("gun_shot", _shotVolume, 0.06f);
@@ -210,6 +224,12 @@ public class GunFeedback : MonoBehaviour
     private Vector3 MuzzlePosition()
     {
         Transform cam = _camera.transform;
+
+        // 1인칭 모델(카메라에 붙은 군인)의 오른손 앞이 총구
+        if (_bodyView != null && _bodyView.ViewHand != null)
+        {
+            return _bodyView.ViewHand.position + cam.forward * 0.55f;
+        }
         if (_gunRenderer != null)
         {
             Bounds b = _gunRenderer.bounds;

@@ -62,6 +62,7 @@ public class PlayerGunFire : MonoBehaviour
             if (_reloadCoroutine != null)
             {
                 StopCoroutine(_reloadCoroutine);
+                _animator.SetBool("IsReloading", false);  // 재장전 동작을 멈춘다.
                 Debug.Log("재장전 취소!");
                 _reloadCoroutine = null;
             }
@@ -83,6 +84,7 @@ public class PlayerGunFire : MonoBehaviour
     private IEnumerator Reloading_Coroutine()
     {
         Debug.Log("재장전 시작!");
+        _animator.SetBool("IsReloading", true);  // 상체만 재장전 동작 (UpperBody 레이어)
 
         // 탄창 빼기 → 넣기 → 장전 손잡이 소리를 재장전 시간에 맞춰 나눠 낸다.
         GameSounds.Play2D("reload_mag_out", 0.8f);
@@ -96,6 +98,7 @@ public class PlayerGunFire : MonoBehaviour
 
         _bulletCount = _maxBulletCount;
 
+        _animator.SetBool("IsReloading", false);
         Debug.Log("재장전 완료!");
         _reloadCoroutine = null;
     }
