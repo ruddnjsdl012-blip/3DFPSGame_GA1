@@ -34,6 +34,14 @@ public class FirstPersonBodyView : MonoBehaviour
     [SerializeField] private Vector3 _healOffset = new Vector3(0f, -0.3f, -0.15f);
     [SerializeField] private Vector3 _healTilt = new Vector3(15f, 0f, 0f);
 
+    [Header("쏠 때 총이 뒤로 튐")]
+    [SerializeField] private float _kickBack = 0.05f;     // 한 발마다 총이 뒤로 밀리는 거리 (m)
+    [SerializeField] private float _kickUp = 0.02f;       // 위로 들리는 거리 (m)
+    [SerializeField] private float _kickPitch = 3f;       // 총구가 들리는 각도 (도)
+    [SerializeField] private float _kickReturn = 16f;     // 돌아오는 빠르기
+
+    private float _kick;  // 0 ~ 1.6, 쏠 때 올라가고 빠르게 줄어든다.
+    private float _kickRoll;
     private PlayerInventory _inventory;
     private float _healBlend;
     private Animator _bodyAnimator;
@@ -139,6 +147,9 @@ public class FirstPersonBodyView : MonoBehaviour
         {
             _viewAnimator.SetTrigger("Attack");
         }
+
+        _kick = Mathf.Min(_kick + 1f, 1.6f);
+        _kickRoll = Random.Range(-1f, 1f);
     }
 
     private void LateUpdate()
@@ -192,8 +203,13 @@ public class FirstPersonBodyView : MonoBehaviour
         _healBlend = Mathf.MoveTowards(_healBlend, healing ? 1f : 0f, Time.deltaTime * 4f);
         float heal = Mathf.SmoothStep(0f, 1f, _healBlend);
 
-        _view.localPosition = _baseOffset + _viewOffset + _reloadOffset * reload + _handFollow + bob + _healOffset * heal;
-        _view.localRotation = Quaternion.Euler(_reloadTilt * reload + _healTilt * heal);
+        // 쏠 때 총이 뒤로 튀었다가 돌아온다.
+        _kick = Mathf.Lerp(_kick, 0f, 1f - Mathf.Exp(-_kickReturn * Time.deltaTime));
+        Vector3 kickOffset = new Vector3(0f, _kickUp, -_kickBack) * _kick;
+        Vector3 kickTilt = new Vector3(-_kickPitch * _kick, 0f, _kickRoll * 2f * _kick);
+
+        _view.localPosition = _baseOffset + _viewOffset + _reloadOffset * reload + _handFollow + bob + _healOffset * heal + kickOffset;
+        _view.localRotation = Quaternion.Euler(_reloadTilt * reload + _healTilt * heal + kickTilt);
 
         Calibrate();
 

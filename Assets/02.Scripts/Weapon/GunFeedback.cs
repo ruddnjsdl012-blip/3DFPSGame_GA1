@@ -8,15 +8,20 @@ using UnityEngine;
 public class GunFeedback : MonoBehaviour
 {
     [Header("반동 (도)")]
-    [SerializeField] private Vector2 _verticalKick = new Vector2(0.5f, 0.9f);  // 한 발마다 위로 튀는 각도 (최소, 최대)
-    [SerializeField] private float _horizontalKick = 0.35f;                    // 좌우로 튀는 각도 (±)
-    [SerializeField] private float _kickSpeed = 30f;                           // 튀는 빠르기 (클수록 즉각적)
-    [SerializeField, Range(0f, 1f)] private float _recoveryRatio = 0.6f;       // 튄 양 중 다시 내려오는 비율
+    [SerializeField] private Vector2 _verticalKick = new Vector2(0.9f, 1.4f);  // 한 발마다 위로 튀는 각도 (최소, 최대)
+    [SerializeField] private float _horizontalKick = 0.5f;                     // 좌우로 튀는 각도 (±)
+    [SerializeField] private float _kickSpeed = 38f;                           // 튀는 빠르기 (클수록 즉각적)
+    [SerializeField] private float _burstGrowth = 0.07f;                       // 계속 쏠수록 한 발마다 반동이 이만큼씩 커진다.
+    [SerializeField] private float _maxBurstMultiplier = 1.7f;                 // 계속 쏠 때 반동 최대 배율
+    [SerializeField, Range(0f, 1f)] private float _recoveryRatio = 0.55f;      // 튄 양 중 다시 내려오는 비율
     [SerializeField] private float _recoveryDelay = 0.12f;                     // 마지막 발사 뒤 이만큼 지나면 내려오기 시작
     [SerializeField] private float _recoverySpeed = 9f;                        // 내려오는 빠르기 (도/초)
 
     [Header("카메라 흔들림")]
-    [SerializeField] private float _shakePerShot = 0.18f;
+    [SerializeField] private float _shakePerShot = 0.26f;
+    [SerializeField] private float _punchPerShot = 1.8f;    // 한 발마다 화면이 위로 탁 튀는 각도 (조준은 그대로)
+    [SerializeField] private float _rollPerShot = 1.4f;     // 화면이 좌우로 기울어지는 각도 (±)
+    [SerializeField] private float _fovPerShot = 1.2f;      // 한 발마다 시야가 넓어지는 정도
 
     [Header("총구 화염")]
     [SerializeField] private Vector3 _fallbackMuzzleOffset = new Vector3(0.12f, -0.13f, 0.85f);  // 총을 못 찾았을 때 (카메라 기준)
@@ -40,6 +45,8 @@ public class GunFeedback : MonoBehaviour
     private float _pendingYaw;
     private float _recoverable;
     private float _lastShotTime = -10f;
+    private int _burstCount;      // 끊지 않고 연달아 쏜 수
+    private float _drift;         // 연사할 때 한쪽으로 쏠리는 방향
 
     private Transform _flash;
     private SpriteRenderer[] _flashSprites;
@@ -100,18 +107,30 @@ public class GunFeedback : MonoBehaviour
 
     public void OnShot()
     {
-        _lastShotTime = Time.time;
+        // 연사: 쉬지 않고 쏠수록 반동이 커지고, 한쪽으로 조금씩 쏠린다.
+        if (Time.time - _lastShotTime > 0.3f)
+        {
+            _burstCount = 0;
+            _drift = Random.Range(-1f, 1f);
+        }
 
-        // 1. 반동: 위로 튀고 좌우로 살짝
-        float up = Random.Range(_verticalKick.x, _verticalKick.y);
+        _burstCount++;
+        _lastShotTime = Time.time;
+        float burst = Mathf.Min(1f + _burstGrowth * (_burstCount - 1), _maxBurstMultiplier);
+        _drift = Mathf.Clamp(_drift + Random.Range(-0.35f, 0.35f), -1f, 1f);
+
+        // 1. 반동: 위로 튀고 좌우로 (조준점이 실제로 움직인다)
+        float up = Random.Range(_verticalKick.x, _verticalKick.y) * burst;
+        float side = (Random.Range(-_horizontalKick, _horizontalKick) + _drift * _horizontalKick * 0.6f * (burst - 1f) * 2f);
         _pendingPitch -= up;  // 음수 = 위로
-        _pendingYaw += Random.Range(-_horizontalKick, _horizontalKick);
+        _pendingYaw += side;
         _recoverable += up * _recoveryRatio;
 
-        // 2. 카메라 흔들림
+        // 2. 카메라 흔들림 + 화면 튐 + 시야 넓어짐 (보이는 화면만)
         if (_shake != null)
         {
             _shake.Shake(_shakePerShot);
+            _shake.Punch(new Vector3(-_punchPerShot * Random.Range(0.8f, 1.2f), side * 1.5f, Random.Range(-_rollPerShot, _rollPerShot)), _fovPerShot);
         }
 
         // 3. 총구 화염

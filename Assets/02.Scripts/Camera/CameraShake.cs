@@ -11,8 +11,17 @@ public class CameraShake : MonoBehaviour
     [SerializeField] private float _frequency = 25f;      // 흔들리는 빠르기
     [SerializeField] private float _decay = 2.2f;         // 흔들림이 줄어드는 빠르기 (1초에)
 
+    [Header("총 쏠 때 화면 튐 (조준은 바뀌지 않고 보이는 화면만 튄다)")]
+    [SerializeField] private float _punchReturn = 18f;    // 튄 화면이 돌아오는 빠르기
+    [SerializeField] private float _fovReturn = 14f;      // 넓어진 시야가 돌아오는 빠르기
+
     private float _trauma;  // 0 ~ 1
     private float _seed;
+    private Vector3 _punch;     // 화면 튐 (도)
+    private float _fovPunch;    // 시야 넓어짐 (도)
+    private Camera _camera;
+    private float _baseFov;
+    private float _appliedFov;
 
     // 흔든다. amount: 0 ~ 1 (총 한 발 0.15, 폭발 0.6 정도)
     public void Shake(float amount)
@@ -20,13 +29,49 @@ public class CameraShake : MonoBehaviour
         _trauma = Mathf.Clamp01(_trauma + amount);
     }
 
+    // 한 발 쏠 때마다: 화면이 위로/옆으로 탁 튀었다가 돌아오고, 시야가 살짝 넓어졌다 돌아온다.
+    public void Punch(Vector3 euler, float fov)
+    {
+        _punch += euler;
+        _punch = Vector3.ClampMagnitude(_punch, 8f);
+        _fovPunch = Mathf.Min(_fovPunch + fov, 6f);
+    }
+
     private void Awake()
     {
         _seed = Random.Range(0f, 100f);
+        _camera = GetComponent<Camera>();
+        if (_camera != null)
+        {
+            _baseFov = _camera.fieldOfView;
+            _appliedFov = _baseFov;
+        }
     }
 
     private void LateUpdate()
     {
+        float dt = Time.deltaTime;
+
+        // 화면 튐: 용수철처럼 빠르게 제자리로
+        _punch = Vector3.Lerp(_punch, Vector3.zero, 1f - Mathf.Exp(-_punchReturn * dt));
+        if (_punch.sqrMagnitude > 0.0001f)
+        {
+            transform.rotation *= Quaternion.Euler(_punch);
+        }
+
+        // 시야(FOV): 다른 곳에서 FOV를 바꾸면 그 값을 기준으로 삼는다.
+        if (_camera != null)
+        {
+            if (Mathf.Abs(_camera.fieldOfView - _appliedFov) > 0.01f)
+            {
+                _baseFov = _camera.fieldOfView;
+            }
+
+            _fovPunch = Mathf.Lerp(_fovPunch, 0f, 1f - Mathf.Exp(-_fovReturn * dt));
+            _appliedFov = _baseFov + _fovPunch;
+            _camera.fieldOfView = _appliedFov;
+        }
+
         if (_trauma <= 0f)
         {
             return;

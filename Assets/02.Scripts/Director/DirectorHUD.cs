@@ -14,6 +14,14 @@ public class DirectorHUD : MonoBehaviour
     private float _alertTime;
     private float _alertDuration;
 
+    // 보스(탱크) 체력 막대
+    private GameObject _bossBar;
+    private RectTransform _bossFill;
+    private TextMeshProUGUI _bossName;
+
+    // 특수 좀비 등 다른 스크립트가 화면 글자를 쓸 때
+    public static DirectorHUD Instance { get; private set; }
+
     public static DirectorHUD Create()
     {
         GameObject canvasObject = new GameObject("DirectorHUD", typeof(RectTransform), typeof(Canvas), typeof(CanvasScaler));
@@ -27,6 +35,7 @@ public class DirectorHUD : MonoBehaviour
 
         DirectorHUD hud = canvasObject.AddComponent<DirectorHUD>();
         hud.Build();
+        Instance = hud;
         return hud;
     }
 
@@ -39,6 +48,59 @@ public class DirectorHUD : MonoBehaviour
         _prompt = CreateText("Prompt", font, 38f, new Vector2(0.5f, 0f), new Vector2(0f, 230f), Color.white);
         _info = CreateText("Info", font, 30f, new Vector2(0f, 1f), new Vector2(40f, -36f), new Color(0.85f, 0.85f, 0.85f));
         _info.alignment = TextAlignmentOptions.Left;
+        BuildBossBar(font);
+    }
+
+    private void BuildBossBar(TMP_FontAsset font)
+    {
+        _bossBar = new GameObject("BossBar", typeof(RectTransform), typeof(Image));
+        RectTransform bar = (RectTransform)_bossBar.transform;
+        bar.SetParent(transform, false);
+        bar.anchorMin = bar.anchorMax = new Vector2(0.5f, 1f);
+        bar.pivot = new Vector2(0.5f, 0.5f);
+        bar.anchoredPosition = new Vector2(0f, -172f);
+        bar.sizeDelta = new Vector2(640f, 22f);
+        Image back = _bossBar.GetComponent<Image>();
+        back.color = new Color(0f, 0f, 0f, 0.6f);
+        back.raycastTarget = false;
+
+        GameObject fill = new GameObject("Fill", typeof(RectTransform), typeof(Image));
+        _bossFill = (RectTransform)fill.transform;
+        _bossFill.SetParent(bar, false);
+        _bossFill.anchorMin = Vector2.zero;
+        _bossFill.anchorMax = Vector2.one;
+        _bossFill.offsetMin = new Vector2(3f, 3f);
+        _bossFill.offsetMax = new Vector2(-3f, -3f);
+        Image fillImage = fill.GetComponent<Image>();
+        fillImage.color = new Color(0.9f, 0.15f, 0.1f);
+        fillImage.raycastTarget = false;
+
+        _bossName = CreateText("BossName", font, 30f, new Vector2(0.5f, 1f), new Vector2(0f, -138f), new Color(1f, 0.4f, 0.3f));
+        _bossBar.SetActive(false);
+    }
+
+    // 보스 체력 막대. name이 비어 있으면 숨긴다.
+    public void SetBoss(string name, float ratio)
+    {
+        bool show = !string.IsNullOrEmpty(name);
+        if (_bossBar.activeSelf != show)
+        {
+            _bossBar.SetActive(show);
+        }
+
+        _bossName.text = show ? name : string.Empty;
+        if (show)
+        {
+            _bossFill.anchorMax = new Vector2(Mathf.Clamp01(ratio), 1f);
+        }
+    }
+
+    private void OnDestroy()
+    {
+        if (Instance == this)
+        {
+            Instance = null;
+        }
     }
 
     // 씬에 있는 한글 폰트(11장 StateText의 폰트)를 빌려 쓴다.

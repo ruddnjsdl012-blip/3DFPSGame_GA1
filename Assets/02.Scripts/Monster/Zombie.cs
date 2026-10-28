@@ -48,12 +48,20 @@ public class Zombie : MonoBehaviour, IDamageable
     // AI 디렉터가 만든 좀비는 거리와 상관없이 플레이어를 끝까지 쫓는다. (L4D 호드)
     private bool _isHunter = false;
 
+    // 맞아도 멈칫하지 않는다. (특수 좀비 탱크)
+    private bool _canStagger = true;
+
 
     public float MaxHealth => _maxHealth;
     public float Health => _health;
+    public bool IsDead => _state == ZombieState.Death;
+    public ZombieState State => _state;
 
     // 좀비가 죽는 순간 발행하는 이벤트 (스포너, UI 등이 구독한다)
     public event Action<Zombie> Died;
+
+    // 좀비가 플레이어를 때리는 순간 발행하는 이벤트 (특수 좀비 탱크가 플레이어를 날려 보낼 때 구독)
+    public event Action<Zombie> Attacked;
 
 
     private ZombieState _state = ZombieState.Idle;
@@ -114,7 +122,15 @@ public class Zombie : MonoBehaviour, IDamageable
 
         StopAllCoroutines();
 
-        if (_health > 0f)
+        if (_health > 0f && _canStagger == false)
+        {
+            // 멈칫하지 않는 좀비(탱크): 피만 튀고 계속 다가온다.
+            GameObject spray = Instantiate(_bloodSprayPrefab, transform);
+            spray.transform.position = damageInfo.HitPoint;
+            spray.transform.forward = damageInfo.HitNormal;
+            GameSounds.PlayAt("zombie_hurt", transform.position, 0.5f, 0.3f);
+        }
+        else if (_health > 0f)
         {
             // 좀비의 자식으로 블러드 스프레이를 생성! -> 위치 수정!
             GameObject bloodSpray = Instantiate(_bloodSprayPrefab, transform);
@@ -252,6 +268,7 @@ public class Zombie : MonoBehaviour, IDamageable
         };
 
         _player.GetComponent<IDamageable>().TakeDamage(info);
+        Attacked?.Invoke(this);
     }
 
     // 가끔 신음 소리를 낸다. (쫓아올 때 더 자주, 같은 소리가 겹치지 않게 전체에서 0.4초 간격)
@@ -278,6 +295,22 @@ public class Zombie : MonoBehaviour, IDamageable
     public void BeginHunt()
     {
         _isHunter = true;
+    }
+
+    // 특수 좀비 능력치. Instantiate 바로 뒤(Start 전에) 부른다. (SpecialZombie가 부른다)
+    public void SetupSpecial(float maxHealth, float moveSpeed, float attackDamage, float attackRange, float attackInterval, bool canStagger)
+    {
+        _maxHealth = maxHealth;
+        _health = maxHealth;
+        _moveSpeed = moveSpeed;
+        _attackDamage = attackDamage;
+        _attackRange = attackRange;
+        _attackInterval = attackInterval;
+        _canStagger = canStagger;
+        if (_agent != null)
+        {
+            _agent.speed = moveSpeed;
+        }
     }
 
     private void StopAgent()

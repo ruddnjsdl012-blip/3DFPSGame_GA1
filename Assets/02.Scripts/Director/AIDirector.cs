@@ -11,6 +11,7 @@ using UnityEngine.AI;
 //  5. 호드   : 일정 시간마다 경적과 함께 좀비 무리가 한꺼번에 몰려온다.
 //  6. 피날레 : 광장의 무전기에서 E로 구조를 부르면, 헬기가 올 때까지 거대한 무리(WWZ)가 계속 몰려온다.
 //  7. 탈출   : 헬기가 오면 헬기장으로 달려가 탈출한다.
+//  + 특수 좀비: 러너(무리), 부머, 스피터가 가끔 나오고, 경로 중간과 피날레에 탱크가 한 번씩 나온다.
 //
 // 맵 정보(스폰 포인트, 경로, 안전가옥, 광장)는 CityMap의 CityMapInfo에서 읽는다.
 // 원래 ZombieSpawner는 AI 디렉터가 대신하므로 시작할 때 끈다.
@@ -55,6 +56,14 @@ public class AIDirector : MonoBehaviour
     [SerializeField] private int _swarmSize = 20;
     [SerializeField] private float _extractionRadius = 5f;
 
+    [Header("특수 좀비")]
+    [SerializeField] private Vector2 _specialInterval = new Vector2(28f, 42f);  // 평소 특수 좀비가 나오는 간격 (초)
+    [SerializeField] private int _maxSpecials = 2;                             // 동시에 있을 수 있는 특수 좀비 수 (탱크 제외)
+    [SerializeField] private int _runnerPack = 3;                              // 러너는 무리 지어 나온다.
+    [SerializeField] private float _finaleSpecialInterval = 18f;
+    [SerializeField, Range(0f, 1f)] private float _tankRouteProgress = 0.55f;  // 경로를 이만큼 지나면 탱크
+    [SerializeField] private int _bileHordeSize = 12;                          // 부머 담즙을 맞으면 몰려오는 수
+
     private readonly List<Zombie> _alive = new List<Zombie>();
     private readonly HashSet<Zombie> _hunters = new HashSet<Zombie>();  // 플레이어를 쫓는 좀비 (길가에 서 있는 좀비 제외)
     private Phase _phase = Phase.Waiting;
@@ -81,8 +90,17 @@ public class AIDirector : MonoBehaviour
     private float _hordeQueueTimer;
     private Vector3 _hordeOrigin;
 
+    private readonly HashSet<Zombie> _specials = new HashSet<Zombie>();
+    private float _specialTimer;
+    private bool _routeTankSpawned;
+    private bool _finaleTankSpawned;
+
+    public static AIDirector Instance { get; private set; }
+
     private void Awake()
     {
+        Instance = this;
+
         // 원래 스포너는 AI 디렉터가 대신한다. (Start 전에 꺼야 스폰 코루틴이 시작되지 않는다)
         foreach (ZombieSpawner spawner in FindObjectsByType<ZombieSpawner>(FindObjectsSortMode.None))
         {
@@ -168,6 +186,8 @@ public class AIDirector : MonoBehaviour
 
             case Phase.BuildUp:
                 SpawnCommons(dt, _spawnInterval);
+                UpdateSpecials(dt, false);
+                CheckRouteTank();
                 _hordeTimer -= dt;
                 if (_hordeTimer <= 0f)
                 {
@@ -195,6 +215,7 @@ public class AIDirector : MonoBehaviour
             case Phase.Relax:
                 // 휴식: 아주 가끔만 나온다.
                 SpawnCommons(dt, _spawnInterval * 4f);
+                UpdateSpecials(dt * 0.5f, false);
                 _phaseTimer -= dt;
                 if (_phaseTimer <= 0f)
                 {
@@ -222,6 +243,7 @@ public class AIDirector : MonoBehaviour
         ChangePhase(Phase.BuildUp, 0f);
         _hordeTimer = Random.Range(35f, 50f);  // 첫 호드는 조금 일찍
         _hud.ShowAlert("생존자를 찾아라", new Color(1f, 0.9f, 0.7f), 2.5f);
+        _specialTimer = Random.Range(20f, 30f);  // 첫 특수 좀비
     }
 
     private void ChangePhase(Phase next, float duration)
@@ -357,7 +379,119 @@ public class AIDirector : MonoBehaviour
         zombie.Died -= OnZombieDied;
         _alive.Remove(zombie);
         _hunters.Remove(zombie);
+        _specials.Remove(zombie);
         _kills++;
+    }
+
+    // ===================== 특수 좀비 =====================
+
+    private void UpdateSpecials(float dt, bool finale)
+    {
+        _specialTimer -= dt;
+        if (_specialTimer > 0f)
+        {
+            return;
+        }
+
+        _specials.RemoveWhere(z => z == null);
+        int max = finale ? _maxSpecials + 1 : _maxSpecials;
+        if (CountSpecials(false) >= max)
+        {
+            _specialTimer = 5f;  // 자리가 나면 곧 나온다.
+            return;
+        }
+
+        _specialTimer = finale ? _finaleSpecialInterval * Random.Range(0.8f, 1.2f) : Random.Range(_specialInterval.x, _specialInterval.y);
+
+        float roll = Random.value;
+        SpecialType type = roll < 0.35f ? SpecialType.Runner : roll < 0.67f ? SpecialType.Boomer : SpecialType.Spitter;
+        SpawnSpecial(type, finale);
+    }
+
+    // 경로를 절반 넘게 지나면 탱크가 한 번 나온다.
+    private void CheckRouteTank()
+    {
+        if (_routeTankSpawned || _map.RoutePoints == null || _map.RoutePoints.Length < 2)
+        {
+            return;
+        }
+
+        float progress = (float)_map.GetRouteIndex(_player.position) / (_map.RoutePoints.Length - 1);
+        if (progress >= _tankRouteProgress && SpawnSpecial(SpecialType.Tank, false))
+        {
+            _routeTankSpawned = true;
+        }
+    }
+
+    private bool SpawnSpecial(SpecialType type, bool finale)
+    {
+        Transform point = PickSpawnPoint(finale);
+        if (point == null)
+        {
+            return false;
+        }
+
+        int count = type == SpecialType.Runner ? Mathf.Max(1, _runnerPack) : 1;
+        bool spawned = false;
+        for (int i = 0; i < count; i++)
+        {
+            Zombie zombie = SpawnZombie(point.position, true);
+            if (zombie == null)
+            {
+                continue;
+            }
+
+            SpecialZombie.Make(zombie, type);
+            _specials.Add(zombie);
+            spawned = true;
+        }
+
+        if (spawned && type == SpecialType.Tank)
+        {
+            _hud.ShowAlert("탱크가 나타났다!", new Color(1f, 0.25f, 0.2f), 3.5f);
+            _intensity = 1f;  // 탱크가 나오면 긴장도 최대
+        }
+
+        return spawned;
+    }
+
+    private int CountSpecials(bool includeTank)
+    {
+        int count = 0;
+        foreach (Zombie zombie in _specials)
+        {
+            if (zombie == null)
+            {
+                continue;
+            }
+
+            SpecialZombie special = zombie.GetComponent<SpecialZombie>();
+            if (special != null && (includeTank || special.Type != SpecialType.Tank))
+            {
+                count++;
+            }
+        }
+
+        return count;
+    }
+
+    // 부머 담즙을 맞으면 부른다: 보이지 않는 곳에서 무리가 몰려오고, 서 있던 좀비들도 달려온다.
+    public void OnPlayerBiled()
+    {
+        if (_phase == Phase.Waiting || _phase == Phase.Done)
+        {
+            return;
+        }
+
+        StartHorde(_bileHordeSize, "담즙을 뒤집어썼다! 놈들이 몰려온다!");
+        foreach (Zombie zombie in _alive)
+        {
+            if (zombie != null && !zombie.IsDead && Vector3.Distance(zombie.transform.position, _player.position) < 45f)
+            {
+                zombie.BeginHunt();
+                _hunters.Add(zombie);
+            }
+        }
     }
 
     // 평소: 플레이어에서 적당히 떨어져 있고 화면에 보이지 않는 스폰 포인트
@@ -487,8 +621,17 @@ public class AIDirector : MonoBehaviour
         }
     }
 
+    private void OnDestroy()
+    {
+        if (Instance == this)
+        {
+            Instance = null;
+        }
+    }
+
     private void StartFinale()
     {
+        _specialTimer = 12f;
         ChangePhase(Phase.Finale, _finaleTime);
         _swarmTimer = 8f;
         _hud.SetPrompt(string.Empty);
@@ -502,6 +645,13 @@ public class AIDirector : MonoBehaviour
     {
         _phaseTimer -= dt;
         _hud.SetTimer($"헬기 도착까지 {Mathf.CeilToInt(Mathf.Max(0f, _phaseTimer))}초");
+
+        // 특수 좀비, 그리고 피날레 중간에 탱크 한 번
+        UpdateSpecials(dt, true);
+        if (!_finaleTankSpawned && _phaseTimer <= _finaleTime * 0.5f && SpawnSpecial(SpecialType.Tank, true))
+        {
+            _finaleTankSpawned = true;
+        }
 
         // 쉬지 않고 광장 곳곳에서 나온다.
         _spawnTimer -= dt;
