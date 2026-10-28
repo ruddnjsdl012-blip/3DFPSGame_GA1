@@ -37,6 +37,8 @@ public class Zombie : MonoBehaviour, IDamageable
     [SerializeField] private bool _alwaysChase = true;
 
     [Header("이펙트")]
+    [Tooltip("켜면 예전 Blood Gush 프리팹을 쓴다. 끄면 BloodEffects(튀는 핏방울, 피 안개, 자국, 피 웅덩이)를 쓴다.")]
+    [SerializeField] private bool _useBloodPrefab = false;
     [SerializeField] private GameObject _bloodSprayPrefab;
 
     private float _attackTimer = 0f;
@@ -125,18 +127,13 @@ public class Zombie : MonoBehaviour, IDamageable
         if (_health > 0f && _canStagger == false)
         {
             // 멈칫하지 않는 좀비(탱크): 피만 튀고 계속 다가온다.
-            GameObject spray = Instantiate(_bloodSprayPrefab, transform);
-            spray.transform.position = damageInfo.HitPoint;
-            spray.transform.forward = damageInfo.HitNormal;
+            SpawnBlood(damageInfo);
             GameSounds.PlayAt("zombie_hurt", transform.position, 0.5f, 0.3f);
         }
         else if (_health > 0f)
         {
-            // 좀비의 자식으로 블러드 스프레이를 생성! -> 위치 수정!
-            GameObject bloodSpray = Instantiate(_bloodSprayPrefab, transform);
-            //bloodSpray.transform.SetParent(transform);
-            bloodSpray.transform.position = damageInfo.HitPoint;
-            bloodSpray.transform.forward = damageInfo.HitNormal;
+            // 맞은 자리에서 피가 튄다.
+            SpawnBlood(damageInfo);
 
             // 잠깐 멈칫 하고 싶다!
             Debug.Log($"{_state} -> Hit");
@@ -149,12 +146,28 @@ public class Zombie : MonoBehaviour, IDamageable
         {
             Debug.Log($"{_state} -> Death");
             _animator.SetTrigger("Death");
+            SpawnBlood(damageInfo);
+            BloodEffects.Death(this);  // 크게 튀고, 쓰러진 자리에 피 웅덩이
             GameSounds.PlayAt("zombie_death", transform.position, 0.9f, 0.1f);
             _state = ZombieState.Death;
             Died?.Invoke(this);
             StartCoroutine(Death_Coroutine());
         }
 
+    }
+
+    private void SpawnBlood(DamageInfo damageInfo)
+    {
+        if (_useBloodPrefab && _bloodSprayPrefab != null)
+        {
+            // 예전 방식: 좀비의 자식으로 블러드 스프레이를 생성
+            GameObject bloodSpray = Instantiate(_bloodSprayPrefab, transform);
+            bloodSpray.transform.position = damageInfo.HitPoint;
+            bloodSpray.transform.forward = damageInfo.HitNormal;
+            return;
+        }
+
+        BloodEffects.Hit(this, damageInfo);
     }
 
     private IEnumerator Hit_Coroutine()

@@ -14,6 +14,7 @@ public class PlayerGunFire : MonoBehaviour
     [SerializeField] private float _range = 100f;            // 사거리
     [SerializeField] private float _damage = 10f;            // 공격력
     [SerializeField] private float _fireInterval = 0.1f;     // 발사 속도
+    [SerializeField] private float _headshotMultiplier = 2.5f;  // 머리를 맞히면 대미지 배율
 
     [Header("예비 총알 (탄창 밖에 가지고 다니는 총알)")]
     [SerializeField] private int _startReserveAmmo = 120;    // 처음 가진 예비 총알
@@ -161,6 +162,24 @@ public class PlayerGunFire : MonoBehaviour
     }
 
 
+    // 맞은 자리가 좀비 머리 근처인가? (Humanoid면 머리 뼈 높이, 아니면 몸 맨 위 15%)
+    private static bool IsHeadshot(Zombie zombie, RaycastHit hit)
+    {
+        Animator animator = zombie.GetComponentInChildren<Animator>();
+        if (animator != null && animator.isHuman)
+        {
+            Transform head = animator.GetBoneTransform(HumanBodyBones.Head);
+            if (head != null)
+            {
+                // 콜라이더(캡슐) 겉면에 맞으므로 높이로 판단한다: 목보다 위면 헤드샷
+                return hit.point.y > head.position.y - 0.12f * zombie.transform.lossyScale.y;
+            }
+        }
+
+        Bounds bounds = hit.collider.bounds;
+        return hit.point.y > bounds.max.y - bounds.size.y * 0.15f;
+    }
+
     private void Shoot()
     {
         // Ray: 레이저(시작위치, 날아갈 방향)
@@ -169,7 +188,9 @@ public class PlayerGunFire : MonoBehaviour
 
         // 2. 레이(광선)를 생성하고 발사될 위치와 진행 방향 설정하기
         Transform cameraTransform = Camera.main.transform;
-        Ray ray = new Ray(cameraTransform.position, cameraTransform.forward);
+        // 탄 퍼짐: 조준점이 벌어진 만큼 총알이 조금씩 빗나간다.
+        Vector3 direction = _feedback != null ? _feedback.SpreadDirection(cameraTransform) : cameraTransform.forward;
+        Ray ray = new Ray(cameraTransform.position, direction);
 
         // 3. 레이가 부딛힌 대상의 정보를 저장할 변수 생성하기
         RaycastHit hitInfo = new RaycastHit();
@@ -180,23 +201,47 @@ public class PlayerGunFire : MonoBehaviour
         {
             // Debug.Log($"{hitInfo.collider.name}이 총알을 맞았다. 대미지: {_damage}");
 
-            // 맞은 자리에 총알 자국 이펙트 만들기
-            ParticleSystem effect = Instantiate(_hitEffectPrefab);
-            effect.transform.position = hitInfo.point; // 맞은 자리
-            effect.transform.forward = hitInfo.normal; // 수직 위치로 회전
-            effect.Play();
+            Zombie zombie = hitInfo.collider.GetComponentInParent<Zombie>();
+            bool hitZombie = zombie != null;
+
+            // 맞은 자리에 총알 자국 이펙트 만들기 (벽/바닥만. 좀비는 BloodEffects가 피를 튀긴다)
+            if (!hitZombie)
+            {
+                ParticleSystem effect = Instantiate(_hitEffectPrefab);
+                effect.transform.position = hitInfo.point; // 맞은 자리
+                effect.transform.forward = hitInfo.normal; // 수직 위치로 회전
+                effect.Play();
+            }
 
             // 맞은 소리: 좀비면 살, 아니면 벽/바닥
-            bool hitZombie = hitInfo.collider.GetComponentInParent<Zombie>() != null;
             GameSounds.PlayAt(hitZombie ? "hit_flesh" : "impact_concrete", hitInfo.point, hitZombie ? 0.6f : 0.8f, 0.03f);
+
+            // 머리를 맞혔나?
+            bool headshot = hitZombie && !zombie.IsDead && IsHeadshot(zombie, hitInfo);
+            bool wasAlive = hitZombie && !zombie.IsDead;
 
             // 대미지 구조체 만들기
             DamageInfo damageInfo = new DamageInfo();
-            damageInfo.Value = _damage;
+            damageInfo.Value = headshot ? _damage * _headshotMultiplier : _damage;
             damageInfo.HitPoint = hitInfo.point;
             damageInfo.HitNormal = hitInfo.normal;
+            damageInfo.Direction = ray.direction;   // 피가 총알 방향으로 튀게
+            damageInfo.IsHeadshot = headshot;
 
             hitInfo.collider.GetComponent<IDamageable>()?.TakeDamage(damageInfo);
+
+            // 좀비 피격 효과: 번쩍임, 조준점 히트 마커, 소리 (피는 Zombie가 BloodEffects로 낸다)
+            if (wasAlive)
+            {
+                bool killed = zombie.IsDead;
+                ZombieHitFlash.Flash(zombie.gameObject, headshot);
+                if (UI_Crosshair.Instance != null)
+                {
+                    UI_Crosshair.Instance.ShowHit(killed, headshot);
+                }
+
+                GameSounds.Play2D(headshot ? "ui_headshot" : "ui_hitmarker", headshot ? 0.7f : 0.45f, 0.05f);
+            }
 
             /*
              hitInfo.collider.GetComponent<Zombie>()?.TakeDamage(_damage);

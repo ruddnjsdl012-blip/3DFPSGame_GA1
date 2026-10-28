@@ -5,6 +5,7 @@ using UnityEngine;
 //  - 반동: 시점이 위로, 좌우로 조금씩 튄다. 쏘기를 멈추면 튄 양의 일부만큼 천천히 내려온다.
 //  - 흔들림: 카메라가 아주 짧게 떨린다.
 //  - 총구 화염: 총 끝에서 불꽃이 번쩍이고 주변이 잠깐 밝아진다.
+//  - 탄 퍼짐: 쏠수록, 움직일수록, 공중에 있을수록 총알이 넓게 퍼진다. 조준점(UI_Crosshair)이 그만큼 벌어진다.
 public class GunFeedback : MonoBehaviour
 {
     [Header("반동 (도)")]
@@ -22,6 +23,15 @@ public class GunFeedback : MonoBehaviour
     [SerializeField] private float _punchPerShot = 1.8f;    // 한 발마다 화면이 위로 탁 튀는 각도 (조준은 그대로)
     [SerializeField] private float _rollPerShot = 1.4f;     // 화면이 좌우로 기울어지는 각도 (±)
     [SerializeField] private float _fovPerShot = 1.2f;      // 한 발마다 시야가 넓어지는 정도
+
+    [Header("탄 퍼짐 (도) - 조준점이 벌어지는 정도")]
+    [SerializeField] private float _baseSpread = 0.35f;     // 가만히 서서 처음 쏠 때
+    [SerializeField] private float _spreadPerShot = 0.45f;  // 한 발마다 더해진다.
+    [SerializeField] private float _maxShotSpread = 4f;     // 쏴서 벌어지는 최대
+    [SerializeField] private float _moveSpread = 1.4f;      // 걸을 때
+    [SerializeField] private float _sprintSpread = 3f;      // 달릴 때 (더해진다)
+    [SerializeField] private float _airSpread = 3.5f;       // 공중에 있을 때
+    [SerializeField] private float _spreadRecovery = 6f;    // 쏘기를 멈추면 줄어드는 빠르기 (도/초)
 
     [Header("총구 화염")]
     [SerializeField] private Vector3 _fallbackMuzzleOffset = new Vector3(0.12f, -0.13f, 0.85f);  // 총을 못 찾았을 때 (카메라 기준)
@@ -47,6 +57,21 @@ public class GunFeedback : MonoBehaviour
     private float _lastShotTime = -10f;
     private int _burstCount;      // 끊지 않고 연달아 쏜 수
     private float _drift;         // 연사할 때 한쪽으로 쏠리는 방향
+    private float _shotSpread;    // 쏴서 생긴 퍼짐
+    private float _moveSpreadNow; // 움직여서 생긴 퍼짐 (부드럽게 따라간다)
+    private CharacterController _controller;
+
+    // 지금 탄 퍼짐 (원뿔의 반각, 도). 조준점이 이 값을 보고 벌어진다.
+    public float CurrentSpread => _baseSpread + _shotSpread + _moveSpreadNow;
+
+    // 시선 방향에서 탄 퍼짐만큼 랜덤으로 벗어난 방향 (PlayerGunFire가 쏠 때 쓴다)
+    public Vector3 SpreadDirection(Transform view)
+    {
+        float angle = CurrentSpread * Mathf.Sqrt(Random.value);  // 가운데로 조금 더 몰리게
+        float around = Random.Range(0f, 360f);
+        Quaternion offset = Quaternion.AngleAxis(around, Vector3.forward) * Quaternion.AngleAxis(angle, Vector3.right);
+        return view.rotation * (offset * Vector3.forward);
+    }
 
     private Transform _flash;
     private SpriteRenderer[] _flashSprites;
@@ -69,6 +94,10 @@ public class GunFeedback : MonoBehaviour
 
         FindGun();
         BuildFlash();
+        _controller = GetComponent<CharacterController>();
+
+        // 쏠 때 벌어지는 조준점 (씬에 있던 고정 조준점은 숨긴다)
+        UI_Crosshair.Create(this);
 
         // 1인칭에서 군인 몸이 화면을 가리지 않게 한다.
         _bodyView = GetComponent<FirstPersonBodyView>();
@@ -116,6 +145,7 @@ public class GunFeedback : MonoBehaviour
 
         _burstCount++;
         _lastShotTime = Time.time;
+        _shotSpread = Mathf.Min(_shotSpread + _spreadPerShot, _maxShotSpread);
         float burst = Mathf.Min(1f + _burstGrowth * (_burstCount - 1), _maxBurstMultiplier);
         _drift = Mathf.Clamp(_drift + Random.Range(-0.35f, 0.35f), -1f, 1f);
 
@@ -180,6 +210,31 @@ public class GunFeedback : MonoBehaviour
         }
 
         UpdateFlash(dt);
+        UpdateSpread(dt);
+    }
+
+    private void UpdateSpread(float dt)
+    {
+        // 쏘기를 멈추면 줄어든다.
+        if (Time.time - _lastShotTime > 0.08f)
+        {
+            _shotSpread = Mathf.MoveTowards(_shotSpread, 0f, _spreadRecovery * dt);
+        }
+
+        float target = 0f;
+        if (_controller != null)
+        {
+            Vector3 velocity = _controller.velocity;
+            float speed = new Vector2(velocity.x, velocity.z).magnitude;
+            target += Mathf.Clamp01(speed / 7f) * _moveSpread;
+            target += Mathf.Clamp01((speed - 7.5f) / 4f) * _sprintSpread;
+            if (!_controller.isGrounded)
+            {
+                target += _airSpread;
+            }
+        }
+
+        _moveSpreadNow = Mathf.MoveTowards(_moveSpreadNow, target, (target > _moveSpreadNow ? 12f : 6f) * dt);
     }
 
     // ===================== 총구 화염 =====================

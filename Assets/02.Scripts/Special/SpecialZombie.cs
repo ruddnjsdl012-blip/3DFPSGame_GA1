@@ -9,11 +9,12 @@ public enum SpecialType
     Tank,     // 탱크: 크고 붉다. 체력이 아주 높고 맞아도 멈칫하지 않는다. 맞으면 날아간다.
 }
 
-// 일반 좀비 프리팹에 붙여서 특수 좀비로 바꾼다. (모델은 그대로, 색과 크기와 능력이 다르다)
+// 일반 좀비 프리팹에 붙여서 특수 좀비로 바꾼다. 겉모습은 SpecialZombieLook (전용 모델 또는 변이), 능력은 여기서.
 // AIDirector가 SpecialZombie.Make(좀비, 종류)로 만든다.
 public class SpecialZombie : MonoBehaviour
 {
     private SpecialType _type;
+    private bool _customModel;   // 넣어 둔 전용 모델을 쓰는 중이면 색과 모양을 바꾸지 않는다.
     private Zombie _zombie;
     private NavMeshAgent _agent;
     private Animator _animator;
@@ -50,8 +51,11 @@ public class SpecialZombie : MonoBehaviour
     private void Setup()
     {
         _agent = GetComponent<NavMeshAgent>();
-        _animator = GetComponentInChildren<Animator>();
         name = "Special_" + _type;
+
+        // 1. 넣어 둔 특수 좀비 모델이 있으면 그 모델로 바꾼다. (Resources/SpecialZombies/종류)
+        _customModel = SpecialZombieLook.TrySwapModel(gameObject, _type);
+        _animator = GetComponentInChildren<Animator>();
 
         switch (_type)
         {
@@ -59,7 +63,7 @@ public class SpecialZombie : MonoBehaviour
                 //                    체력  속도  공격력 범위  간격  멈칫
                 _zombie.SetupSpecial(18f, 10f, 6f, 1.5f, 0.8f, true);
                 transform.localScale *= 0.85f;
-                Tint(new Color(1f, 0.85f, 0.25f), 0.25f);
+                Tint(new Color(1f, 0.88f, 0.5f), 0.2f);
                 SetAnimatorSpeed(1.5f);
                 _agent.acceleration = 30f;
                 _agent.angularSpeed = 720f;
@@ -67,27 +71,33 @@ public class SpecialZombie : MonoBehaviour
 
             case SpecialType.Boomer:
                 _zombie.SetupSpecial(25f, 4.5f, 5f, 1.6f, 1.4f, true);
-                ScaleModel(new Vector3(1.45f, 1.05f, 1.45f));
-                Tint(new Color(0.55f, 1f, 0.4f), 0.25f);
+                ScaleModel(new Vector3(1.15f, 1f, 1.15f));
+                Tint(new Color(0.7f, 0.95f, 0.5f), 0.2f);
                 SetAnimatorSpeed(0.8f);
                 _abilityTimer = 3f;
                 break;
 
             case SpecialType.Spitter:
                 _zombie.SetupSpecial(40f, 5.5f, 4f, 1.5f, 1.2f, true);
-                ScaleModel(new Vector3(0.9f, 1.12f, 0.9f));
-                Tint(new Color(0.8f, 0.4f, 1f), 0.3f);
+                ScaleModel(new Vector3(0.92f, 1.05f, 0.92f));
+                Tint(new Color(0.8f, 0.6f, 1f), 0.25f);
                 _abilityTimer = 2.5f;
                 break;
 
             case SpecialType.Tank:
-                _zombie.SetupSpecial(700f, 6.2f, 30f, 2.8f, 1.6f, false);
-                transform.localScale *= 1.75f;
-                Tint(new Color(1f, 0.35f, 0.28f), 0.2f);
+                _zombie.SetupSpecial(700f, 6.2f, 30f, 2.6f, 1.6f, false);
+                transform.localScale *= 1.5f;
+                Tint(new Color(0.95f, 0.55f, 0.48f), 0.15f);
                 SetAnimatorSpeed(0.85f);
                 _agent.acceleration = 20f;
                 _zombie.Attacked += OnTankHit;
                 break;
+        }
+
+        // 2. 모델이 없으면 일반 좀비를 변이시킨다. (뼈 크기, 자세, 몸에 붙는 덩어리)
+        if (!_customModel)
+        {
+            SpecialZombieLook.Mutate(gameObject, _type);
         }
 
         _zombie.Died += OnDied;
@@ -340,6 +350,11 @@ public class SpecialZombie : MonoBehaviour
 
     private void ScaleModel(Vector3 scale)
     {
+        if (_customModel)
+        {
+            return;
+        }
+
         Transform model = _animator != null ? _animator.transform : transform;
         model.localScale = Vector3.Scale(model.localScale, scale);
     }
@@ -363,6 +378,11 @@ public class SpecialZombie : MonoBehaviour
     // 색을 입힌다. 어두운 밤에도 알아보게 살짝 빛나게 한다.
     private void Tint(Color color, float glow)
     {
+        if (_customModel)
+        {
+            return;
+        }
+
         foreach (Renderer renderer in GetComponentsInChildren<Renderer>(true))
         {
             if (!(renderer is SkinnedMeshRenderer) && !(renderer is MeshRenderer))
