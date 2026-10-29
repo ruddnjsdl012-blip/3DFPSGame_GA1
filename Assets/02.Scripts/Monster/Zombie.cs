@@ -29,7 +29,7 @@ public class Zombie : MonoBehaviour, IDamageable
     [SerializeField] private float _attackDamage = 10f;     // 공격 대미지
     [SerializeField] private float _attackRange = 1.5f;     // 공격 범위
     [SerializeField] private float _attackInterval = 1.2f;  // 공격 간격
-    [SerializeField] private float _moveSpeed = 7.6f;       // 걷는 플레이어를 압박하되 전력 질주는 따라잡지 못한다.
+    [SerializeField] private float _moveSpeed = 6f;         // 일반 좀비 이동속도
     [SerializeField] private float _maxHealth = 30;
     [SerializeField] private float _health;
 
@@ -110,7 +110,7 @@ public class Zombie : MonoBehaviour, IDamageable
         ZombieHealthBar healthBar = GetComponent<ZombieHealthBar>();
         if (healthBar != null)
         {
-            healthBar.SetVisible(_special != null);
+            healthBar.SetVisible(_special != null && _special.Type == SpecialType.Tank);
         }
 
         // 맞거나 죽는 동작 중에 모델이 땅에 파묻히거나 미끄러지지 않게 모델 위치를 고정한다.

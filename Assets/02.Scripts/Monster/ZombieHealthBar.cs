@@ -13,7 +13,8 @@ public class ZombieHealthBar : MonoBehaviour
     private void Awake()
     {
         CacheReferences();
-        SetVisible(GetComponent<SpecialZombie>() != null);
+        SpecialZombie special = GetComponent<SpecialZombie>();
+        SetVisible(special != null && special.Type == SpecialType.Tank);
     }
 
     private void CacheReferences()
@@ -31,12 +32,14 @@ public class ZombieHealthBar : MonoBehaviour
         }
     }
 
-    // 일반 좀비는 Canvas와 LateUpdate를 모두 멈춘다.
+    // 탱크를 제외한 모든 좀비는 Canvas와 LateUpdate를 모두 멈춘다.
     // 탱크의 화면 상단 보스 체력바(DirectorHUD)는 별도로 유지한다.
     public void SetVisible(bool visible)
     {
         CacheReferences();
-        visible = visible && _zombie != null && _slider != null;
+        SpecialZombie special = GetComponent<SpecialZombie>();
+        visible = visible && special != null && special.Type == SpecialType.Tank
+            && _zombie != null && _slider != null;
         if (_barObject != null && _barObject.activeSelf != visible)
         {
             _barObject.SetActive(visible);

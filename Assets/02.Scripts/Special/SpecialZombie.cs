@@ -105,7 +105,7 @@ public class SpecialZombie : MonoBehaviour
         ZombieHealthBar healthBar = GetComponent<ZombieHealthBar>();
         if (healthBar != null)
         {
-            healthBar.SetVisible(true);
+            healthBar.SetVisible(_type == SpecialType.Tank);
         }
     }
 
