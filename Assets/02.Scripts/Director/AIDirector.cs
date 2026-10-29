@@ -90,6 +90,8 @@ public class AIDirector : MonoBehaviour
     private float _hordeQueueTimer;
     private Vector3 _hordeOrigin;
 
+    private bool _inMidRoom;
+    private bool _midRoomReached;
     private readonly HashSet<Zombie> _specials = new HashSet<Zombie>();
     private float _specialTimer;
     private bool _routeTankSpawned;
@@ -174,6 +176,13 @@ public class AIDirector : MonoBehaviour
         UpdateHordeQueue(dt);
         _hud.SetInfo($"좀비 {_alive.Count}   처치 {_kills}");
 
+        // 중간 안전가옥 (L4D 체크포인트): 안에 있는 동안은 좀비가 새로 나오지 않는다.
+        if (UpdateMidSafeRoom())
+        {
+            CheckRadio();
+            return;
+        }
+
         switch (_phase)
         {
             case Phase.Waiting:
@@ -238,6 +247,35 @@ public class AIDirector : MonoBehaviour
 
     // ===================== 진행 =====================
 
+    // 중간 안전가옥 안이면 true (그동안 새 좀비, 호드, 특수 좀비를 멈춘다)
+    private bool UpdateMidSafeRoom()
+    {
+        bool inside = _phase != Phase.Waiting && _phase != Phase.Finale && _phase != Phase.Escape && _map.InMidSafeRoom(_player.position);
+        if (inside != _inMidRoom)
+        {
+            _inMidRoom = inside;
+            if (inside)
+            {
+                if (!_midRoomReached)
+                {
+                    _midRoomReached = true;
+                    _hud.ShowAlert("중간 안전가옥 도착", new Color(0.45f, 1f, 0.55f), 3f);
+                }
+
+                _hud.SetObjective("안전가옥: 보급을 챙기고 숨을 돌려라");
+            }
+            else
+            {
+                _hud.SetObjective("주차타워 옥상 → 고가도로를 지나 광장의 무전기로 가라");
+                // 나가자마자 쉬지 못하게: 다음 호드를 조금 당긴다.
+                _hordeTimer = Mathf.Min(_hordeTimer, 15f);
+                _intensity = Mathf.Min(_intensity, 0.3f);
+            }
+        }
+
+        return inside;
+    }
+
     private void BeginRun()
     {
         ChangePhase(Phase.BuildUp, 0f);
@@ -286,7 +324,9 @@ public class AIDirector : MonoBehaviour
         }
 
         // 출발점과 피날레는 빼고 경로 가운데에 흩어 놓는다. (가까이 가야 쫓아오는 좀비)
-        for (int i = 0; i < _wanderers; i++)
+        // 맵이 길수록 더 많이 (예전 맵 경로 약 220m 기준)
+        int count = Mathf.RoundToInt(_wanderers * Mathf.Max(1f, _map.RouteLength / 220f));
+        for (int i = 0; i < count; i++)
         {
             Transform point = route[Random.Range(2, route.Length - 1)];
             Vector2 offset = Random.insideUnitCircle * 5f;

@@ -9,18 +9,20 @@ using UnityEngine.AI;
 using UnityEngine.SceneManagement;
 using Object = UnityEngine.Object;
 
-// L4D / World War Z 느낌의 도시 맵을 GameScene에 만들어 주는 도구.
+// L4D / World War Z 느낌의 도시 맵을 GameScene에 만들어 주는 도구. (v2: 예전 맵의 약 4배 - 길이 2배, 폭 2배)
 // 메뉴: Tools > L4D 맵 > 도시 맵 만들기
 //
-//  출발 안전가옥 → 골목 → 큰길(막힌 사거리, 불탄 차) → 바리케이드로 막힌 길을 주차장으로 우회
-//  → 마지막 거리 → 피날레 광장(헬기장, 엄폐물에서 버티기)
+//  출발 안전가옥 → 골목 미로 → 큰길(막힌 사거리, 바리케이드) → 공원 → 중간 안전가옥
+//  → 주차타워(1층 → 경사로 → 옥상) → 다리 → 고가도로(차가 막힌 고속도로) → 내려가는 경사로 → 피날레 광장
 //
+//  - 배치(바닥, 보이지 않는 벽, 건물 줄, 소품, 스폰 포인트, 경로)는 CityMapBuilder.Layout.cs에 있다.
+//    (tools/layout.py로 위에서 본 그림과 함께 만든 데이터)
 //  - 원래 Map과 맵 소품(드럼통, 상자, 씬에 놓은 좀비 등)은 지우지 않고 Map_Old 아래로 옮겨 꺼 둔다.
 //  - Player를 출발 안전가옥으로 옮기고, ZombieSpawner의 스폰 포인트를 새 맵의 숨은 자리로 바꾼다.
 //  - CityMap에 NavMesh Surface를 붙여 굽는다. (14장의 AI Navigation 패키지)
 //  - 바꾸기 전의 씬은 Assets/Backup_Map에 복사해 둔다.
 // 모델: Kenney City Kit (Commercial, Roads), Car Kit - CC0 (www.kenney.nl)
-public static class CityMapBuilder
+public static partial class CityMapBuilder
 {
     private const string Menu = "Tools/L4D 맵/";
     private const string RootName = "CityMap";
@@ -160,18 +162,21 @@ public static class CityMapBuilder
     }
 
     // ===================== 전체 흐름 =====================
-    // 좌표 (단위 m, y 0 = 바닥, +z = 앞으로 나아가는 방향)
-    //  출발 안전가옥 : x -4~4,   z -4~6   (북쪽 가운데 문)
-    //  골목         : x -3~3,   z 6~30
-    //  큰길         : x -8~8,   z 30~150 (차도 -5~5, 양쪽 인도)
-    //  막힌 사거리   : z 64~76, 양옆 x ±18에서 바리케이드
-    //  바리케이드    : z 112 (큰길 완전 차단) → 동쪽 주차장으로 우회
-    //  주차장       : x 8~36,   z 88~138 (가운데 x 8~16, z 100~126은 건물 블록)
-    //  피날레 광장   : x -30~30, z 150~200 (헬기장 z 186)
+    // 좌표 (단위 m, y 0 = 바닥, +z = 앞으로 나아가는 방향, 고가 높이 y 6)
+    //  출발 안전가옥 : x -4~4,    z -4~6
+    //  골목 미로     : x -20~20,  z 6~58   (4m 골목, 막다른 길)
+    //  큰길          : x -8~8,    z 58~150 (막힌 사거리 z 92~104, z 150에서 바리케이드)
+    //  공원 입구     : x 8~20,    z 122~138 → 공원 x 20~64, z 110~188 (분수, 나무, 산울타리)
+    //  중간 안전가옥 : x 44~54,   z 188~198 (남쪽 문 → 북쪽 문)
+    //  주차타워      : x 24~58,   z 200~244 (1층) → 경사로 x 58~64 → 옥상 y 6
+    //  다리          : x -4~24,   z 236~244 (y 6)
+    //  고가도로      : x -20~-4,  z 200~340 (y 6) → 내려가는 경사로 z 340~372
+    //  피날레 광장   : x -40~40,  z 372~432 (헬기장 z 418, 무전기 z 404)
 
     private static void Build(Scene scene)
     {
         _rng = new System.Random(20261028);
+        _breakablesSearched = false;
         MaterialCache.Clear();
         ModelCache.Clear();
         BoundsCache.Clear();
@@ -194,20 +199,23 @@ public static class CityMapBuilder
         CityMapInfo info = rootObject.AddComponent<CityMapInfo>();
 
         Progress("바닥과 길", 0.2f);
-        BuildGround(root);
+        BuildGeneratedFloors(Group("Ground", root));
         Progress("보이지 않는 경계 벽", 0.25f);
-        BuildBoundary(root);
-        Progress("출발 안전가옥", 0.3f);
+        BuildGeneratedWalls(Group("Boundary", root));
+        Progress("고가도로와 주차타워", 0.3f);
+        BuildGeneratedDecks(Group("Elevated", root));
+        Progress("안전가옥", 0.35f);
         BoxCollider startArea = BuildStartSafeRoom(root, out Transform startPoint);
-        Progress("건물", 0.4f);
-        BuildBuildings(root);
+        BoxCollider midArea = BuildMidSafeRoom(root);
+        Progress("건물", 0.45f);
+        BuildGeneratedBuildings(Group("Buildings", root));
         Progress("소품", 0.6f);
-        BuildProps(root);
+        BuildGeneratedProps(Group("Props", root));
         Progress("피날레 광장", 0.7f);
-        BuildFinale(root, out BoxCollider finaleArea, out Transform extraction);
+        BuildFinaleMarkers(root, out BoxCollider finaleArea, out Transform extraction);
         Progress("스폰 포인트", 0.75f);
-        Transform[] spawnPoints = BuildSpawnPoints(root);
-        Transform[] route = BuildRoute(root);
+        Transform[] spawnPoints = Points(root, "SpawnPoints", "SpawnPoint_", GeneratedSpawnPoints);
+        Transform[] route = Points(root, "Route", "Route_", GeneratedRoute);
         MarkStatic(root);
 
         SetRef(info, "_startPoint", startPoint);
@@ -216,7 +224,8 @@ public static class CityMapBuilder
         SetRef(info, "_extractionPoint", extraction);
         SetArray(info, "_spawnPoints", spawnPoints);
         SetArray(info, "_routePoints", route);
-        Log.Add("✔ 맵: 출발 안전가옥 → 골목 → 큰길(막힌 사거리) → 바리케이드 → 주차장 우회 → 피날레 광장");
+        SetArray(info, "_midSafeRooms", new Object[] { midArea });
+        Log.Add("✔ 맵 v2 (약 4배): 안전가옥 → 골목 미로 → 큰길 → 공원 → 중간 안전가옥 → 주차타워 → 고가도로 → 피날레 광장");
 
         Progress("Player와 스포너", 0.8f);
         MovePlayer(startPoint);
@@ -225,8 +234,9 @@ public static class CityMapBuilder
         Progress("분위기", 0.85f);
         ApplyAtmosphere();
 
+        // 콜라이더 없는 모델 보강, 드럼통/상자 NavMesh Obstacle, NavMesh 굽기 (좀비 끼임 고치기와 같은 처리)
         Progress("NavMesh 굽기", 0.9f);
-        BakeNavMesh(rootObject);
+        Log.AddRange(ZombieStuckFix.PrepareAndBake(info));
     }
 
     private static void Progress(string text, float value)
@@ -284,131 +294,54 @@ public static class CityMapBuilder
                || go.GetComponent<UnityEngine.EventSystems.EventSystem>() != null;
     }
 
-    // ===================== 바닥 =====================
+    // ===================== 보이지 않는 벽 =====================
 
-    private static void BuildGround(Transform root)
-    {
-        Transform ground = Group("Ground", root);
-
-        // 전체 바닥 (아스팔트)
-        Box("Base", ground, new Vector3(0f, -0.5f, 100f), new Vector3(100f, 1f, 232f), "Asphalt", true);
-
-        // 출발 안전가옥과 골목 바닥
-        Box("SafeRoomFloor", ground, new Vector3(0f, 0.005f, 1f), new Vector3(8f, 0.01f, 10f), "Tile", false);
-        Box("AlleyFloor", ground, new Vector3(0f, 0.005f, 18f), new Vector3(6f, 0.01f, 24f), "Concrete", false);
-
-        // 큰길 양쪽 인도 (높이 0.15m: 걸어서 올라갈 수 있다)
-        Sidewalk(ground, -6.5f, 30f, 64f);
-        Sidewalk(ground, -6.5f, 76f, 150f);
-        Sidewalk(ground, 6.5f, 30f, 64f);
-        Sidewalk(ground, 6.5f, 76f, 88f);
-        Sidewalk(ground, 6.5f, 100f, 126f);
-        Sidewalk(ground, 6.5f, 138f, 150f);
-
-        // 차선
-        for (float z = 32f; z < 148f; z += 6f)
-        {
-            if (z > 62f && z < 78f)
-            {
-                continue;
-            }
-
-            Box("LaneLine", ground, new Vector3(0f, 0.012f, z), new Vector3(0.18f, 0.01f, 3f), "LineWhite", false);
-        }
-
-        // 사거리 횡단보도
-        for (float x = -4f; x <= 4f; x += 1.2f)
-        {
-            Box("Crosswalk", ground, new Vector3(x, 0.012f, 62.5f), new Vector3(0.6f, 0.01f, 2.4f), "LineWhite", false);
-            Box("Crosswalk", ground, new Vector3(x, 0.012f, 77.5f), new Vector3(0.6f, 0.01f, 2.4f), "LineWhite", false);
-        }
-
-        // 주차장 바닥과 주차선
-        Box("ParkingFloor", ground, new Vector3(22f, 0.005f, 113f), new Vector3(28f, 0.01f, 50f), "Concrete", false);
-        for (float z = 90f; z < 137f; z += 3.2f)
-        {
-            Box("ParkingLine", ground, new Vector3(31f, 0.012f, z), new Vector3(5f, 0.01f, 0.12f), "LineWhite", false);
-        }
-
-        // 피날레 광장 바닥
-        Box("PlazaFloor", ground, new Vector3(0f, 0.005f, 175f), new Vector3(60f, 0.01f, 50f), "Tile", false);
-    }
-
-    private static void Sidewalk(Transform parent, float x, float z0, float z1)
-    {
-        Box("Sidewalk", parent, new Vector3(x, 0.075f, (z0 + z1) * 0.5f), new Vector3(3f, 0.15f, z1 - z0), "Concrete", true);
-    }
-
-    // ===================== 보이지 않는 경계 벽 =====================
-
-    private static void BuildBoundary(Transform root)
-    {
-        Transform walls = Group("Boundary", root);
-
-        // 골목
-        WallZ(walls, -3.5f, 6f, 30f);
-        WallZ(walls, 3.5f, 6f, 30f);
-        WallX(walls, 29.5f, -8.5f, -3f);
-        WallX(walls, 29.5f, 3f, 8.5f);
-
-        // 큰길 서쪽
-        WallZ(walls, -8.5f, 29.5f, 64f);
-        WallZ(walls, -8.5f, 76f, 150f);
-
-        // 막힌 사거리 (서쪽, 동쪽)
-        WallX(walls, 63.5f, -18.5f, -8.5f);
-        WallX(walls, 76.5f, -18.5f, -8.5f);
-        WallZ(walls, -18.5f, 63.5f, 76.5f);
-        WallX(walls, 63.5f, 8.5f, 18.5f);
-        WallX(walls, 76.5f, 8.5f, 18.5f);
-        WallZ(walls, 18.5f, 63.5f, 76.5f);
-
-        // 큰길 동쪽 (주차장 입구 z 88~100, 출구 z 126~138은 열려 있다)
-        WallZ(walls, 8.5f, 29.5f, 64f);
-        WallZ(walls, 8.5f, 76f, 88f);
-        WallZ(walls, 8.5f, 138f, 150f);
-
-        // 가운데 건물 블록 (큰길과 주차장 사이)
-        WallZ(walls, 8.5f, 100f, 126f);
-        WallZ(walls, 16.5f, 100f, 126f);
-        WallX(walls, 99.5f, 8.5f, 16.5f);
-        WallX(walls, 126.5f, 8.5f, 16.5f);
-
-        // 주차장 바깥
-        WallX(walls, 87.5f, 8.5f, 36.5f);
-        WallX(walls, 138.5f, 8.5f, 36.5f);
-        WallZ(walls, 36.5f, 87.5f, 138.5f);
-
-        // 큰길을 막은 바리케이드
-        WallX(walls, 112f, -8.5f, 8.5f);
-
-        // 피날레 광장
-        WallX(walls, 149.5f, -30.5f, -8.5f);
-        WallX(walls, 149.5f, 8.5f, 30.5f);
-        WallZ(walls, -30.5f, 149.5f, 200.5f);
-        WallZ(walls, 30.5f, 149.5f, 200.5f);
-        WallX(walls, 200.5f, -30.5f, 30.5f);
-    }
-
-    // z 위치에서 x0~x1을 막는 벽
-    private static void WallX(Transform parent, float z, float x0, float x1)
-    {
-        InvisibleWall(parent, new Vector3((x0 + x1) * 0.5f, 0f, z), new Vector3(Mathf.Abs(x1 - x0) + 1f, 0f, 1f));
-    }
-
-    // x 위치에서 z0~z1을 막는 벽
-    private static void WallZ(Transform parent, float x, float z0, float z1)
-    {
-        InvisibleWall(parent, new Vector3(x, 0f, (z0 + z1) * 0.5f), new Vector3(1f, 0f, Mathf.Abs(z1 - z0) + 1f));
-    }
-
-    private static void InvisibleWall(Transform parent, Vector3 center, Vector3 size)
+    // 가운데 (cx, cz), 바닥 높이 y0에서 h만큼 올라가는 벽
+    private static void Wall(Transform parent, float cx, float y0, float cz, float sx, float h, float sz)
     {
         GameObject wall = new GameObject("Wall");
         wall.transform.SetParent(parent, false);
-        wall.transform.localPosition = new Vector3(center.x, WallHeight * 0.5f, center.z);
+        wall.transform.localPosition = new Vector3(cx, y0 + h * 0.5f, cz);
         BoxCollider collider = wall.AddComponent<BoxCollider>();
-        collider.size = new Vector3(size.x, WallHeight, size.z);
+        collider.size = new Vector3(sx, h, sz);
+    }
+
+    // ===================== 고가 / 경사로 =====================
+
+    // 윗면이 DeckY인 판 (고가도로, 주차타워 옥상, 다리)
+    private static void Deck(Transform parent, string name, float x0, float x1, float z0, float z1, string material)
+    {
+        Box(name, parent, new Vector3((x0 + x1) * 0.5f, DeckY - 0.25f, (z0 + z1) * 0.5f), new Vector3(x1 - x0, 0.5f, z1 - z0), material, true);
+        // 판 아래 테두리 보 (아래에서 올려다볼 때 두께감)
+        Box(name + "Beam", parent, new Vector3((x0 + x1) * 0.5f, DeckY - 0.9f, z0 + 0.4f), new Vector3(x1 - x0, 0.8f, 0.8f), "Concrete", false);
+        Box(name + "Beam", parent, new Vector3((x0 + x1) * 0.5f, DeckY - 0.9f, z1 - 0.4f), new Vector3(x1 - x0, 0.8f, 0.8f), "Concrete", false);
+    }
+
+    // zStart(높이 yStart)에서 zEnd(높이 yEnd)까지 비스듬한 판. rails면 양옆에 낮은 난간
+    private static void Ramp(Transform parent, float x0, float x1, float zStart, float zEnd, float yStart, float yEnd, bool rails)
+    {
+        Vector3 bottom = new Vector3((x0 + x1) * 0.5f, yStart, zStart);
+        Vector3 top = new Vector3((x0 + x1) * 0.5f, yEnd, zEnd);
+        Vector3 along = top - bottom;
+        float length = along.magnitude + 0.4f;  // 위아래 이음새가 벌어지지 않게 조금 길게
+        Quaternion rotation = Quaternion.LookRotation(along.normalized, Vector3.up);
+        Vector3 normal = rotation * Vector3.up;
+        Vector3 center = (bottom + top) * 0.5f - normal * 0.25f;
+
+        GameObject slab = Box("Ramp", parent, center, new Vector3(x1 - x0, 0.5f, length), "Asphalt", true);
+        slab.transform.localRotation = rotation;
+        if (!rails)
+        {
+            return;
+        }
+
+        Vector3 right = rotation * Vector3.right;
+        foreach (float side in new[] { -1f, 1f })
+        {
+            Vector3 railCenter = center + normal * 0.75f + right * side * ((x1 - x0) * 0.5f - 0.15f);
+            GameObject rail = Box("RampRail", parent, railCenter, new Vector3(0.3f, 1f, length), "Concrete", true);
+            rail.transform.localRotation = rotation;
+        }
     }
 
     // ===================== 출발 안전가옥 =====================
@@ -439,10 +372,7 @@ public static class CityMapBuilder
 
         AddLight(room, "SafeLight", new Vector3(0f, 3.2f, 1f), LightType.Point, new Color(0.55f, 1f, 0.6f), 2.2f, 10f, 0f, Vector3.zero);
 
-        // 뒤쪽과 옆이 비어 보이지 않게 건물로 막는다.
-        BuildingRow(root, new Vector3(-14f, 0f, -4.4f), Vector3.right, 28f, Vector3.forward, 12f, LowBuildings, false);
-        BuildingRow(root, new Vector3(4.4f, 0f, -4f), Vector3.forward, 10f, Vector3.left, 8f, LowBuildings, false);
-        BuildingRow(root, new Vector3(-4.4f, 0f, 6f), Vector3.back, 10f, Vector3.right, 8f, LowBuildings, false);
+        // 둘레의 건물은 BuildGeneratedBuildings가 자동으로 세운다.
 
         startPoint = new GameObject("StartPoint").transform;
         startPoint.SetParent(room, false);
@@ -457,57 +387,181 @@ public static class CityMapBuilder
         return trigger;
     }
 
+    // ===================== 중간 안전가옥 (L4D 체크포인트) =====================
+    // 공원 북쪽 끝. 남쪽 문으로 들어가서 북쪽 문으로 나가면 주차타워. 안에서는 좀비가 새로 나오지 않는다. (AIDirector)
+    private static BoxCollider BuildMidSafeRoom(Transform root)
+    {
+        Transform room = Group("MidSafeRoom", root);
+        const float x0 = 44f, x1 = 54f, z0 = 188f, z1 = 198f;
+        float cx = (x0 + x1) * 0.5f, cz = (z0 + z1) * 0.5f;
+        const float doorX0 = 48f, doorX1 = 50.4f;  // 문 자리 (남북 같은 위치)
+
+        Box("WallWest", room, new Vector3(x0 + 0.15f, 1.75f, cz), new Vector3(0.3f, 3.5f, z1 - z0), "SafeWall", true);
+        Box("WallEast", room, new Vector3(x1 - 0.15f, 1.75f, cz), new Vector3(0.3f, 3.5f, z1 - z0), "SafeWall", true);
+        foreach (float z in new[] { z0 + 0.15f, z1 - 0.15f })
+        {
+            Box("WallL", room, new Vector3((x0 + doorX0) * 0.5f, 1.75f, z), new Vector3(doorX0 - x0, 3.5f, 0.3f), "SafeWall", true);
+            Box("WallR", room, new Vector3((doorX1 + x1) * 0.5f, 1.75f, z), new Vector3(x1 - doorX1, 3.5f, 0.3f), "SafeWall", true);
+            Box("DoorTop", room, new Vector3((doorX0 + doorX1) * 0.5f, 3.05f, z), new Vector3(doorX1 - doorX0, 0.9f, 0.3f), "SafeWall", true);
+            Box("DoorSign", room, new Vector3((doorX0 + doorX1) * 0.5f, 3.2f, z + (z < cz ? -0.18f : 0.18f)), new Vector3(1.6f, 0.35f, 0.05f), "LampGreen", false);
+        }
+
+        Box("Roof", room, new Vector3(cx, 3.6f, cz), new Vector3(x1 - x0, 0.2f, z1 - z0), "RoofDark", true);
+        // 활짝 열린 빨간 철문 두 개 (안쪽으로 열려 벽에 붙어 있다)
+        Box("SafeDoor", room, new Vector3(doorX0 - 0.1f, 1.25f, z0 + 1.35f), new Vector3(0.12f, 2.5f, 2.3f), "SafeDoor", true);
+        Box("SafeDoor", room, new Vector3(doorX1 + 0.1f, 1.25f, z1 - 1.35f), new Vector3(0.12f, 2.5f, 2.3f), "SafeDoor", true);
+
+        // 안쪽: 간이 침대, 탁자 위 보급품 자리 (SupplySpawner가 진짜 보급품으로 바꾼다)
+        Box("Cot", room, new Vector3(x0 + 1.2f, 0.3f, cz + 2f), new Vector3(1f, 0.6f, 2.2f), "Cot", true);
+        Box("Cot", room, new Vector3(x0 + 1.2f, 0.3f, cz - 2f), new Vector3(1f, 0.6f, 2.2f), "Cot", true);
+        Box("Table", room, new Vector3(x1 - 1f, 0.45f, cz), new Vector3(1f, 0.9f, 2.6f), "Wood", true);
+        Box("MidAmmoCrate", room, new Vector3(x1 - 1f, 1.05f, cz - 0.7f), new Vector3(0.5f, 0.3f, 0.8f), "Military", false);
+        Box("MidMedKitBox", room, new Vector3(x1 - 1f, 1.0f, cz + 0.6f), new Vector3(0.4f, 0.2f, 0.5f), "MedRed", false);
+        AddLight(room, "SafeLight", new Vector3(cx, 3.2f, cz), LightType.Point, new Color(0.55f, 1f, 0.6f), 2.2f, 10f, 0f, Vector3.zero);
+
+        GameObject area = new GameObject("MidSafeRoomArea");
+        area.transform.SetParent(room, false);
+        area.transform.localPosition = new Vector3(cx, 1.5f, cz);
+        BoxCollider trigger = area.AddComponent<BoxCollider>();
+        trigger.isTrigger = true;
+        trigger.size = new Vector3(x1 - x0 - 0.6f, 3f, z1 - z0 - 0.6f);
+        return trigger;
+    }
+
+    // ===================== 피날레 광장 표시 / 스폰 포인트 / 경로 =====================
+
+    private static void BuildFinaleMarkers(Transform root, out BoxCollider area, out Transform extraction)
+    {
+        Transform plaza = Group("FinalePlaza", root);
+        extraction = new GameObject("ExtractionPoint").transform;
+        extraction.SetParent(plaza, false);
+        extraction.localPosition = new Vector3(0f, 0f, 418f);
+
+        GameObject areaObject = new GameObject("FinaleArea");
+        areaObject.transform.SetParent(plaza, false);
+        areaObject.transform.localPosition = new Vector3(0f, 2f, 402f);
+        area = areaObject.AddComponent<BoxCollider>();
+        area.isTrigger = true;
+        area.size = new Vector3(80f, 4f, 60f);
+    }
+
+    private static Transform[] Points(Transform root, string groupName, string prefix, Vector3[] positions)
+    {
+        Transform group = Group(groupName, root);
+        Transform[] result = new Transform[positions.Length];
+        for (int i = 0; i < positions.Length; i++)
+        {
+            Transform point = new GameObject(prefix + i).transform;
+            point.SetParent(group, false);
+            point.localPosition = positions[i];
+            result[i] = point;
+        }
+
+        return result;
+    }
+
+    // ===================== 공원 / 고가 / 광장 소품 =====================
+
+    private static void Tree(Transform parent, Vector3 position, float scale)
+    {
+        Transform tree = Group("Tree", parent);
+        tree.localPosition = position;
+        tree.localRotation = Quaternion.Euler(0f, Range(0f, 360f), 0f);
+        // 잎은 2.4m보다 위에만 (아래로 지나다닐 수 있게, 콜라이더도 붙지 않게)
+        Cylinder("Trunk", tree, new Vector3(0f, 1.8f * scale, 0f), 0.35f * scale, 3.6f * scale, "Bark", true);
+        Primitive(PrimitiveType.Sphere, "Leaves", tree, new Vector3(0f, 4.3f * scale, 0f), Vector3.one * 3.2f * scale, "Leaves", false);
+        Primitive(PrimitiveType.Sphere, "Leaves", tree, new Vector3(0.7f * scale, 3.8f * scale, 0.4f * scale), Vector3.one * 2.2f * scale, "Leaves", false);
+        Primitive(PrimitiveType.Sphere, "Leaves", tree, new Vector3(-0.6f * scale, 4f * scale, -0.5f * scale), Vector3.one * 2.4f * scale, "LeavesDark", false);
+    }
+
+    private static void Bench(Transform parent, Vector3 position, float yaw)
+    {
+        Transform bench = Group("Bench", parent);
+        bench.localPosition = position;
+        bench.localRotation = Quaternion.Euler(0f, yaw, 0f);
+        Box("Seat", bench, new Vector3(0f, 0.45f, 0f), new Vector3(1.8f, 0.08f, 0.5f), "Wood", true);
+        Box("Back", bench, new Vector3(0f, 0.8f, -0.22f), new Vector3(1.8f, 0.5f, 0.06f), "Wood", false);
+        Box("LegL", bench, new Vector3(-0.8f, 0.22f, 0f), new Vector3(0.08f, 0.45f, 0.45f), "MetalDark", false);
+        Box("LegR", bench, new Vector3(0.8f, 0.22f, 0f), new Vector3(0.08f, 0.45f, 0.45f), "MetalDark", false);
+    }
+
+    private static void Fountain(Transform parent, Vector3 position)
+    {
+        Transform fountain = Group("Fountain", parent);
+        fountain.localPosition = position;
+        Cylinder("Basin", fountain, new Vector3(0f, 0.3f, 0f), 8f, 0.6f, "Concrete", true);
+        Cylinder("Water", fountain, new Vector3(0f, 0.58f, 0f), 7.4f, 0.04f, "Water", false);
+        Cylinder("Pillar", fountain, new Vector3(0f, 1.2f, 0f), 0.9f, 2.4f, "Concrete", true);
+        Cylinder("Bowl", fountain, new Vector3(0f, 2.4f, 0f), 2.6f, 0.3f, "Concrete", false);
+        AddLight(fountain, "FountainLight", new Vector3(0f, 1f, 0f), LightType.Point, new Color(0.5f, 0.75f, 1f), 1.2f, 9f, 0f, Vector3.zero);
+    }
+
+    // 고가도로 위 표지판 문 (기둥 둘 + 가로 보 + 초록 표지판)
+    private static void Gantry(Transform parent, Vector3 position)
+    {
+        Transform gantry = Group("Gantry", parent);
+        gantry.localPosition = position;
+        Box("PostL", gantry, new Vector3(-7.4f, 3f, 0f), new Vector3(0.4f, 6f, 0.4f), "MetalDark", true);
+        Box("PostR", gantry, new Vector3(7.4f, 3f, 0f), new Vector3(0.4f, 6f, 0.4f), "MetalDark", true);
+        Box("Beam", gantry, new Vector3(0f, 5.8f, 0f), new Vector3(15.2f, 0.4f, 0.4f), "MetalDark", false);
+        Box("SignA", gantry, new Vector3(-3.5f, 5f, -0.25f), new Vector3(5f, 1.6f, 0.1f), "SignGreen", false);
+        Box("SignB", gantry, new Vector3(3.5f, 5f, -0.25f), new Vector3(5f, 1.6f, 0.1f), "SignGreen", false);
+    }
+
+    private static void Helipad(Transform parent, Vector3 center)
+    {
+        Transform pad = Group("Helipad", parent);
+        pad.localPosition = center;
+        Cylinder("Pad", pad, new Vector3(0f, 0.04f, 0f), 12f, 0.08f, "Concrete", false);
+        Box("H_Left", pad, new Vector3(-1.6f, 0.09f, 0f), new Vector3(0.7f, 0.02f, 4.6f), "LineYellow", false);
+        Box("H_Right", pad, new Vector3(1.6f, 0.09f, 0f), new Vector3(0.7f, 0.02f, 4.6f), "LineYellow", false);
+        Box("H_Middle", pad, new Vector3(0f, 0.09f, 0f), new Vector3(2.5f, 0.02f, 0.7f), "LineYellow", false);
+        for (int i = 0; i < 8; i++)
+        {
+            float angle = i * 45f * Mathf.Deg2Rad;
+            Box("PadLight", pad, new Vector3(Mathf.Sin(angle) * 6.4f, 0.15f, Mathf.Cos(angle) * 6.4f), new Vector3(0.25f, 0.25f, 0.25f), "LampRed", false);
+        }
+
+        Light flare = AddLight(pad, "Flare", new Vector3(0f, 1f, 0f), LightType.Point, new Color(1f, 0.2f, 0.15f), 3f, 16f, 0f, Vector3.zero);
+        AddFlicker(flare, MapFlickerLight.FlickerMode.Fire);
+    }
+
+    // 무전기 (AIDirector가 "Radio"라는 이름으로 찾아 [E] 구조 요청 자리로 쓴다)
+    private static void Radio(Transform parent, Vector3 position)
+    {
+        Box("RadioTable", parent, position + new Vector3(0f, 0.45f, 0f), new Vector3(1.4f, 0.9f, 0.8f), "Wood", true);
+        Box("Radio", parent, position + new Vector3(0f, 1.05f, 0f), new Vector3(0.6f, 0.3f, 0.35f), "Military", false);
+        Light radioLight = AddLight(parent, "RadioLight", position + new Vector3(0f, 1.4f, 0f), LightType.Point, new Color(0.3f, 1f, 0.4f), 1.2f, 4f, 0f, Vector3.zero);
+        AddFlicker(radioLight, MapFlickerLight.FlickerMode.Siren);
+    }
+
+    // 내 Drum / Box 프리팹 (쏘면 터지고 부서진다)
+    private static GameObject _drumPrefab;
+    private static GameObject _cratePrefab;
+    private static bool _breakablesSearched;
+
+    private static void Breakable(Transform parent, bool drum, Vector3 position)
+    {
+        if (!_breakablesSearched)
+        {
+            _breakablesSearched = true;
+            _drumPrefab = FindPrefabWith<Drum>();
+            _cratePrefab = FindPrefabWith<Box>();
+        }
+
+        GameObject prefab = drum ? _drumPrefab : _cratePrefab;
+        if (prefab == null)
+        {
+            return;
+        }
+
+        GameObject instance = (GameObject)PrefabUtility.InstantiatePrefab(prefab, parent);
+        instance.transform.localPosition = position;
+        instance.transform.localRotation = Quaternion.Euler(0f, Range(0f, 360f), 0f);
+    }
+
     // ===================== 건물 =====================
 
-    private static void BuildBuildings(Transform root)
-    {
-        Transform b = Group("Buildings", root);
-
-        // 골목 양쪽
-        BuildingRow(b, new Vector3(-3f, 0f, 6f), Vector3.forward, 24f, Vector3.right, 9f, Buildings, true);
-        BuildingRow(b, new Vector3(3f, 0f, 30f), Vector3.back, 24f, Vector3.left, 9f, Buildings, true);
-
-        // 큰길 서쪽
-        BuildingRow(b, new Vector3(-8f, 0f, 30f), Vector3.forward, 34f, Vector3.right, 12f, Buildings, true);
-        BuildingRow(b, new Vector3(-8f, 0f, 76f), Vector3.forward, 74f, Vector3.right, 12f, Buildings, true);
-
-        // 큰길 동쪽
-        BuildingRow(b, new Vector3(8f, 0f, 64f), Vector3.back, 34f, Vector3.left, 12f, Buildings, true);
-        BuildingRow(b, new Vector3(8f, 0f, 88f), Vector3.back, 12f, Vector3.left, 10f, Buildings, true);
-        BuildingRow(b, new Vector3(8f, 0f, 126f), Vector3.back, 26f, Vector3.left, 7.5f, Buildings, true);
-        BuildingRow(b, new Vector3(8f, 0f, 150f), Vector3.back, 12f, Vector3.left, 10f, Buildings, true);
-
-        // 막힌 사거리 너머
-        BuildingRow(b, new Vector3(-22f, 0f, 63f), Vector3.forward, 14f, Vector3.right, 10f, LowBuildings, false);
-        BuildingRow(b, new Vector3(22f, 0f, 77f), Vector3.back, 14f, Vector3.left, 10f, LowBuildings, false);
-
-        // 주차장 둘레
-        BuildingRow(b, new Vector3(36f, 0f, 88f), Vector3.left, 18f, Vector3.forward, 10f, LowBuildings, true);
-        BuildingRow(b, new Vector3(18f, 0f, 138f), Vector3.right, 18f, Vector3.back, 5f, LowBuildings, true);
-        BuildingRow(b, new Vector3(36f, 0f, 138f), Vector3.back, 50f, Vector3.left, 10f, Buildings, true);
-
-        // 피날레 광장 둘레
-        BuildingRow(b, new Vector3(-30f, 0f, 150f), Vector3.forward, 50f, Vector3.right, 12f, Buildings, true);
-        BuildingRow(b, new Vector3(30f, 0f, 200f), Vector3.back, 50f, Vector3.left, 12f, Buildings, true);
-        BuildingRow(b, new Vector3(30f, 0f, 200f), Vector3.left, 60f, Vector3.back, 12f, Buildings, true);
-        BuildingRow(b, new Vector3(-30f, 0f, 150f), Vector3.right, 10f, Vector3.forward, 6f, LowBuildings, true);
-        BuildingRow(b, new Vector3(18f, 0f, 150f), Vector3.right, 12f, Vector3.forward, 6f, LowBuildings, true);
-
-        // 멀리 보이는 고층 빌딩 (배경)
-        for (int i = 0; i < 9; i++)
-        {
-            float x = -64f + i * 16f;
-            Place(Kit.Commercial, Pick(Skyscrapers), b, new Vector3(x, 0f, 228f + Range(-6f, 6f)), 180f + Range(-10f, 10f),
-                CityScale * 1.4f, Vector3.one, false, false, Pick("K_Commercial", "K_CommercialA", "K_CommercialB"));
-        }
-
-        for (int i = 0; i < 6; i++)
-        {
-            float z = 40f + i * 30f;
-            Place(Kit.Commercial, Pick(Skyscrapers), b, new Vector3(-50f, 0f, z), 90f, CityScale * 1.3f, Vector3.one, false, false, "K_CommercialA");
-            Place(Kit.Commercial, Pick(Skyscrapers), b, new Vector3(56f, 0f, z), -90f, CityScale * 1.3f, Vector3.one, false, false, "K_CommercialB");
-        }
-    }
 
     // start에서 direction 방향으로 length만큼, 건물 정면이 facing 쪽을 보도록 빈틈없이 세운다.
     private static void BuildingRow(Transform parent, Vector3 start, Vector3 direction, float length, Vector3 facing,
@@ -567,117 +621,7 @@ public static class CityMapBuilder
 
     // ===================== 소품 =====================
 
-    private static void BuildProps(Transform root)
-    {
-        Transform props = Group("Props", root);
 
-        // --- 골목: 쓰레기통, 상자, 고장 난 벽등 ---
-        Place(Kit.Roads, "dumpster", props, new Vector3(-2.1f, 0f, 13f), 90f, CityScale, Vector3.one, true, false, "K_Roads");
-        Place(Kit.Roads, "dumpster", props, new Vector3(2.1f, 0f, 22f), -90f, CityScale, Vector3.one, true, false, "K_Roads");
-        Place(Kit.Cars, "box", props, new Vector3(-2.2f, 0f, 17f), 20f, CarScale, Vector3.one, true, false, "K_Cars");
-        WallLamp(props, new Vector3(-2.9f, 2.8f, 10f), Vector3.right, MapFlickerLight.FlickerMode.Broken);
-        WallLamp(props, new Vector3(2.9f, 2.8f, 26f), Vector3.left, MapFlickerLight.FlickerMode.Broken);
-
-        // --- 큰길: 버려진 차, 원뿔, 잔해 ---
-        Car(props, "sedan", new Vector3(-2.5f, 0f, 38f), 15f, false);
-        Car(props, "taxi", new Vector3(3f, 0f, 46f), 170f, false);
-        Car(props, "suv", new Vector3(-1.5f, 0f, 55f), 75f, true);
-        Car(props, "van", new Vector3(3.2f, 0f, 84f), -10f, false);
-        Car(props, "hatchback-sports", new Vector3(-3f, 0f, 92f), 200f, false);
-        Car(props, "delivery", new Vector3(2.5f, 0f, 100f), 5f, false);
-        Car(props, "sedan-sports", new Vector3(-2f, 0f, 120f), 160f, false);
-        Car(props, "suv-luxury", new Vector3(3f, 0f, 134f), -20f, true);
-        Car(props, "sedan", new Vector3(-3f, 0f, 143f), 95f, false);
-
-        foreach (Vector3 p in new[] { new Vector3(-1f, 0f, 33f), new Vector3(0.5f, 0f, 34f), new Vector3(1.2f, 0f, 58f), new Vector3(-4f, 0f, 104f) })
-        {
-            Place(Kit.Cars, "cone", props, p, Range(0f, 360f), CarScale, Vector3.one, false, false, "K_Cars");
-        }
-
-        foreach (string debris in new[] { "debris-tire", "debris-door", "debris-bumper", "debris-plate-a" })
-        {
-            Place(Kit.Cars, debris, props, new Vector3(Range(-4f, 4f), 0f, Range(36f, 140f)), Range(0f, 360f), CarScale, Vector3.one, false, false, "K_Cars");
-        }
-
-        // --- 막힌 사거리: 경찰차, 구급차, 바리케이드 ---
-        Car(props, "police", new Vector3(-12f, 0f, 68f), 80f, false);
-        Siren(props, new Vector3(-12f, 2f, 68f), new Color(0.2f, 0.4f, 1f));
-        Car(props, "ambulance", new Vector3(13f, 0f, 72f), -100f, false);
-        Siren(props, new Vector3(13f, 2.6f, 72f), new Color(1f, 0.15f, 0.1f));
-        Barricade(props, new Vector3(-18f, 0f, 70f), 90f, 12f);
-        Barricade(props, new Vector3(18f, 0f, 70f), 90f, 12f);
-
-        // --- 큰길을 막은 바리케이드 (z 112) ---
-        Car(props, "truck", new Vector3(-3.5f, 0f, 112.8f), 90f, false);
-        Car(props, "garbage-truck", new Vector3(3.5f, 0f, 111.5f), -80f, true);
-        Barricade(props, new Vector3(0f, 0f, 110.5f), 0f, 16f);
-        Box("SignDetour", props, new Vector3(-5f, 1.6f, 108.5f), new Vector3(2.2f, 0.8f, 0.08f), "LampRed", false);
-
-        // --- 주차장: 주차된 차들 ---
-        string[] parked = { "sedan", "hatchback-sports", "suv", "van", "taxi", "sedan-sports", "delivery-flat", "police", "suv-luxury" };
-        for (int i = 0; i < 9; i++)
-        {
-            float z = 92f + i * 5.1f;
-            if (_rng.NextDouble() < 0.25)
-            {
-                continue;
-            }
-
-            Car(props, parked[i], new Vector3(31f, 0f, z), i % 2 == 0 ? -90f : 90f, i == 4);
-        }
-
-        Car(props, "firetruck", new Vector3(22f, 0f, 96f), 20f, false);
-        Car(props, "delivery", new Vector3(24f, 0f, 131f), 160f, false);
-
-        // --- 가로등 ---
-        for (float z = 36f; z < 150f; z += 20f)
-        {
-            if (z > 60f && z < 80f)
-            {
-                continue;
-            }
-
-            StreetLight(props, new Vector3(-6.8f, 0.15f, z), Vector3.right, _rng.NextDouble() < 0.3);
-            StreetLight(props, new Vector3(6.8f, 0.15f, z + 10f), Vector3.left, _rng.NextDouble() < 0.3);
-        }
-
-        // --- 드럼통과 상자 (내 프리팹: 쏘면 터지고 부서진다) ---
-        GameObject drum = FindPrefabWith<Drum>();
-        GameObject crate = FindPrefabWith<Box>();
-        Vector3[] drums =
-        {
-            new Vector3(-2.3f, 1f, 20f), new Vector3(-6f, 1.15f, 50f), new Vector3(-5.6f, 1.15f, 51.2f),
-            new Vector3(10f, 1f, 70f), new Vector3(20f, 1f, 104f), new Vector3(21.2f, 1f, 105f),
-            new Vector3(-12f, 1f, 172f), new Vector3(12f, 1f, 178f),
-        };
-        Vector3[] crates =
-        {
-            new Vector3(2.3f, 0.5f, 15f), new Vector3(6f, 0.65f, 40f), new Vector3(-6f, 0.65f, 96f),
-            new Vector3(28f, 0.5f, 120f), new Vector3(-20f, 0.5f, 160f), new Vector3(20f, 0.5f, 190f),
-        };
-        int placed = PlacePrefabs(drum, props, drums) + PlacePrefabs(crate, props, crates);
-        if (placed > 0)
-        {
-            Log.Add("✔ 내 Drum/Box 프리팹 " + placed + "개를 맵에 놓았습니다. (쏘면 터지고 부서짐)");
-        }
-    }
-
-    private static int PlacePrefabs(GameObject prefab, Transform parent, Vector3[] positions)
-    {
-        if (prefab == null)
-        {
-            return 0;
-        }
-
-        foreach (Vector3 position in positions)
-        {
-            GameObject instance = (GameObject)PrefabUtility.InstantiatePrefab(prefab, parent);
-            instance.transform.position = position;
-            instance.transform.rotation = Quaternion.Euler(0f, Range(0f, 360f), 0f);
-        }
-
-        return positions.Length;
-    }
 
     private static void Barricade(Transform parent, Vector3 center, float yaw, float width)
     {
@@ -756,63 +700,6 @@ public static class CityMapBuilder
 
     // ===================== 피날레 광장 =====================
 
-    private static void BuildFinale(Transform root, out BoxCollider area, out Transform extraction)
-    {
-        Transform plaza = Group("FinalePlaza", root);
-
-        // 헬기장 (구조 지점)
-        Cylinder("Helipad", plaza, new Vector3(0f, 0.04f, 186f), 10f, 0.08f, "Concrete", false);
-        Box("H_Left", plaza, new Vector3(-1.4f, 0.09f, 186f), new Vector3(0.6f, 0.02f, 4f), "LineYellow", false);
-        Box("H_Right", plaza, new Vector3(1.4f, 0.09f, 186f), new Vector3(0.6f, 0.02f, 4f), "LineYellow", false);
-        Box("H_Middle", plaza, new Vector3(0f, 0.09f, 186f), new Vector3(2.2f, 0.02f, 0.6f), "LineYellow", false);
-        for (int i = 0; i < 8; i++)
-        {
-            float angle = i * 45f * Mathf.Deg2Rad;
-            Vector3 p = new Vector3(Mathf.Sin(angle) * 5.4f, 0.15f, 186f + Mathf.Cos(angle) * 5.4f);
-            Box("PadLight", plaza, p, new Vector3(0.25f, 0.25f, 0.25f), "LampRed", false);
-        }
-
-        Light flare = AddLight(plaza, "Flare", new Vector3(0f, 1f, 186f), LightType.Point, new Color(1f, 0.2f, 0.15f), 3f, 14f, 0f, Vector3.zero);
-        AddFlicker(flare, MapFlickerLight.FlickerMode.Fire);
-
-        // 방어 진지: 모래주머니(낮은 벽)와 콘크리트 블록 - 좀비 무리를 막으며 버틴다.
-        Sandbags(plaza, new Vector3(-6f, 0f, 176f), 0f, 6f);
-        Sandbags(plaza, new Vector3(6f, 0f, 176f), 0f, 6f);
-        Sandbags(plaza, new Vector3(-9f, 0f, 183f), 90f, 5f);
-        Sandbags(plaza, new Vector3(9f, 0f, 183f), 90f, 5f);
-        Sandbags(plaza, new Vector3(-6f, 0f, 194f), 0f, 6f);
-        Sandbags(plaza, new Vector3(6f, 0f, 194f), 0f, 6f);
-
-        Box("Block", plaza, new Vector3(-18f, 0.6f, 165f), new Vector3(3f, 1.2f, 1f), "Concrete", true);
-        Box("Block", plaza, new Vector3(17f, 0.6f, 168f), new Vector3(1f, 1.2f, 3f), "Concrete", true);
-        Box("Block", plaza, new Vector3(-20f, 0.6f, 190f), new Vector3(1f, 1.2f, 3f), "Concrete", true);
-        Box("Block", plaza, new Vector3(21f, 0.6f, 192f), new Vector3(3f, 1.2f, 1f), "Concrete", true);
-        Car(plaza, "police", new Vector3(-14f, 0f, 178f), 30f, false);
-        Car(plaza, "truck", new Vector3(15f, 0f, 181f), -60f, true);
-
-        // 무전기 (다음 단계에서 '구조 요청' 버튼으로 쓴다)
-        Box("RadioTable", plaza, new Vector3(0f, 0.45f, 179f), new Vector3(1.4f, 0.9f, 0.8f), "Wood", true);
-        Box("Radio", plaza, new Vector3(0f, 1.05f, 179f), new Vector3(0.6f, 0.3f, 0.35f), "Military", false);
-        Light radioLight = AddLight(plaza, "RadioLight", new Vector3(0f, 1.4f, 179f), LightType.Point, new Color(0.3f, 1f, 0.4f), 1.2f, 4f, 0f, Vector3.zero);
-        AddFlicker(radioLight, MapFlickerLight.FlickerMode.Siren);
-
-        // 광장 가로등
-        StreetLight(plaza, new Vector3(-24f, 0f, 158f), Vector3.right, false);
-        StreetLight(plaza, new Vector3(24f, 0f, 158f), Vector3.left, true);
-        StreetLight(plaza, new Vector3(-24f, 0f, 194f), Vector3.right, true);
-        StreetLight(plaza, new Vector3(24f, 0f, 194f), Vector3.left, false);
-
-        extraction = new GameObject("ExtractionPoint").transform;
-        extraction.SetParent(plaza, false);
-        extraction.localPosition = new Vector3(0f, 0f, 186f);
-
-        GameObject areaObject = new GameObject("FinaleArea");
-        areaObject.transform.SetParent(plaza, false);
-        areaObject.transform.localPosition = new Vector3(0f, 2f, 175f);
-        area = areaObject.AddComponent<BoxCollider>();
-        area.isTrigger = true;
-        area.size = new Vector3(60f, 4f, 50f);
-    }
 
     private static void Sandbags(Transform parent, Vector3 center, float yaw, float width)
     {
@@ -825,53 +712,7 @@ public static class CityMapBuilder
 
     // ===================== 스폰 포인트 / 진행 경로 =====================
 
-    // 플레이어 눈에 잘 안 띄는 곳: 막힌 사거리 옆길, 주차장 구석, 건물 블록 뒤, 광장 모서리
-    private static Transform[] BuildSpawnPoints(Transform root)
-    {
-        Transform group = Group("SpawnPoints", root);
-        Vector3[] points =
-        {
-            new Vector3(0f, 0f, 28f),
-            new Vector3(-15f, 0f, 70f), new Vector3(15f, 0f, 66f), new Vector3(-15f, 0f, 74f), new Vector3(15f, 0f, 75f),
-            new Vector3(-4f, 0f, 108f), new Vector3(34f, 0f, 89f), new Vector3(33f, 0f, 136f), new Vector3(24f, 0f, 113f),
-            new Vector3(-4f, 0f, 146f), new Vector3(4f, 0f, 118f),
-            new Vector3(-26f, 0f, 154f), new Vector3(26f, 0f, 154f), new Vector3(-26f, 0f, 197f), new Vector3(26f, 0f, 197f),
-            new Vector3(0f, 0f, 198f), new Vector3(-27f, 0f, 176f), new Vector3(27f, 0f, 176f),
-        };
 
-        Transform[] result = new Transform[points.Length];
-        for (int i = 0; i < points.Length; i++)
-        {
-            Transform point = new GameObject("SpawnPoint_" + (i + 1)).transform;
-            point.SetParent(group, false);
-            point.localPosition = points[i];
-            result[i] = point;
-        }
-
-        return result;
-    }
-
-    private static Transform[] BuildRoute(Transform root)
-    {
-        Transform group = Group("Route", root);
-        Vector3[] points =
-        {
-            new Vector3(0f, 0f, 0f), new Vector3(0f, 0f, 18f), new Vector3(0f, 0f, 40f), new Vector3(0f, 0f, 70f),
-            new Vector3(0f, 0f, 94f), new Vector3(22f, 0f, 96f), new Vector3(26f, 0f, 113f), new Vector3(22f, 0f, 131f),
-            new Vector3(0f, 0f, 132f), new Vector3(0f, 0f, 150f), new Vector3(0f, 0f, 175f),
-        };
-
-        Transform[] result = new Transform[points.Length];
-        for (int i = 0; i < points.Length; i++)
-        {
-            Transform point = new GameObject("Route_" + i).transform;
-            point.SetParent(group, false);
-            point.localPosition = points[i];
-            result[i] = point;
-        }
-
-        return result;
-    }
 
     // ===================== Player / 스포너 / 분위기 / NavMesh =====================
 
@@ -949,40 +790,6 @@ public static class CityMapBuilder
         Log.Add("✔ 해 질 녘 조명과 옅은 안개");
     }
 
-    private static void BakeNavMesh(GameObject map)
-    {
-        Type surfaceType = Type.GetType("Unity.AI.Navigation.NavMeshSurface, Unity.AI.Navigation");
-        if (surfaceType == null)
-        {
-            Log.Add("⚠ AI Navigation 패키지가 없어 NavMesh를 굽지 못했습니다. (14장처럼 패키지를 설치한 뒤 CityMap에 NavMesh Surface를 붙여 Bake)");
-            return;
-        }
-
-        Component surface = map.AddComponent(surfaceType);
-        SerializedObject serialized = new SerializedObject(surface);
-        SetInt(serialized, "m_CollectObjects", 2);  // Current Object Hierarchy (CityMap의 자식만)
-        SetInt(serialized, "m_UseGeometry", 1);     // Physics Colliders (보이지 않는 벽까지 포함)
-        serialized.ApplyModifiedPropertiesWithoutUndo();
-
-        surfaceType.GetMethod("BuildNavMesh")?.Invoke(surface, null);
-
-        System.Reflection.PropertyInfo dataProperty = surfaceType.GetProperty("navMeshData");
-        NavMeshData data = dataProperty?.GetValue(surface) as NavMeshData;
-        if (data == null)
-        {
-            Log.Add("⚠ NavMesh 굽기에 실패했습니다. CityMap의 NavMesh Surface에서 Bake를 눌러 주세요.");
-            return;
-        }
-
-        Scene scene = map.scene;
-        string folder = Path.ChangeExtension(scene.path, null);
-        EnsureFolder(folder);
-        string path = folder + "/NavMesh-CityMap.asset";
-        AssetDatabase.DeleteAsset(path);
-        AssetDatabase.CreateAsset(data, path);
-        dataProperty.SetValue(surface, data);
-        Log.Add("✔ CityMap에 NavMesh Surface를 붙여 구웠습니다. (" + path + ")");
-    }
 
     private static void SetInt(SerializedObject serialized, string name, int value)
     {
@@ -1493,6 +1300,14 @@ public static class CityMapBuilder
             case "LampWarm": color = new Color(0.9f, 0.8f, 0.6f); emission = new Color(2.5f, 2f, 1.3f); break;
             case "LampRed": color = new Color(0.5f, 0.05f, 0.05f); emission = new Color(2.5f, 0.15f, 0.1f); break;
             case "LampGreen": color = new Color(0.1f, 0.5f, 0.15f); emission = new Color(0.2f, 2.2f, 0.5f); break;
+            case "Grass": color = new Color(0.2f, 0.32f, 0.15f); smoothness = 0.05f; break;
+            case "Leaves": color = new Color(0.16f, 0.3f, 0.12f); smoothness = 0.1f; break;
+            case "LeavesDark": color = new Color(0.11f, 0.22f, 0.09f); smoothness = 0.1f; break;
+            case "Bark": color = new Color(0.22f, 0.15f, 0.09f); break;
+            case "Brick": color = new Color(0.38f, 0.2f, 0.15f); smoothness = 0.08f; break;
+            case "Water": color = new Color(0.12f, 0.22f, 0.28f); smoothness = 0.95f; break;
+            case "MetalDark": color = new Color(0.2f, 0.21f, 0.22f); metallic = 0.6f; smoothness = 0.4f; break;
+            case "SignGreen": color = new Color(0.05f, 0.35f, 0.15f); smoothness = 0.3f; break;
             default: color = new Color(0.5f, 0.5f, 0.5f); break;
         }
     }

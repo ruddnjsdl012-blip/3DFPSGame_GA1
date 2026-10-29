@@ -58,7 +58,8 @@ public class PlayerBombFire : MonoBehaviour
     public void Throw(float power, float upward)
     {
         GetLaunch(power, upward, out Vector3 start, out Vector3 velocity);
-        Bomb bomb = Instantiate(_bombPrefab, start, Quaternion.identity);
+        Bomb bomb = Instantiate(_bombPrefab, start, Random.rotation);
+        GrenadeModel.ReplaceVisual(bomb.gameObject);  // 날아가는 것도 손에 든 것과 같은 수류탄 모양
         GameSounds.Play2D("bomb_throw", 0.7f);
 
         Rigidbody rigidbody = bomb.GetComponent<Rigidbody>();

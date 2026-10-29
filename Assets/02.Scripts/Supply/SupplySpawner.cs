@@ -49,12 +49,17 @@ public class SupplySpawner : MonoBehaviour
         Debug.Log("[SupplySpawner] 보급품 " + count + "개를 놓았습니다.");
     }
 
-    // ---------- 출발 안전가옥 ----------
+    // ---------- 출발 안전가옥 + 중간 안전가옥 ----------
     private int SpawnSafeRoom()
     {
+        return SpawnSafeRoom("AmmoCrate", "MedKitBox", true) + SpawnSafeRoom("MidAmmoCrate", "MidMedKitBox", false);
+    }
+
+    private int SpawnSafeRoom(string crateName, string medName, bool fallbackToStartRoom)
+    {
         // 맵을 만들 때 탁자 위에 놓았던 장식용 상자 자리에 진짜 보급품을 놓는다.
-        Transform crate = FindChild(_map.transform, "AmmoCrate");
-        Transform medBox = FindChild(_map.transform, "MedKitBox");
+        Transform crate = FindChild(_map.transform, crateName);
+        Transform medBox = FindChild(_map.transform, medName);
         if (crate != null && medBox != null)
         {
             Vector3 ammoPos = Bottom(crate);
@@ -70,7 +75,7 @@ public class SupplySpawner : MonoBehaviour
 
         // 장식 상자가 없으면 안전가옥 바닥에
         BoxCollider area = _map.StartSafeRoomArea;
-        if (area == null)
+        if (!fallbackToStartRoom || area == null)
         {
             return 0;
         }
@@ -96,16 +101,20 @@ public class SupplySpawner : MonoBehaviour
         int first = 1;
         int last = route.Length - 2;
         int count = 0;
+
+        // 맵이 길수록 묶음을 더 놓는다. (약 55m마다 하나)
+        int caches = Mathf.Max(_caches, Mathf.RoundToInt(_map.RouteLength / 55f));
+        int ammoPiles = Mathf.Max(_routeAmmoPiles, Mathf.RoundToInt(caches / 3.5f));
         List<int> ammoSlots = new List<int>();
-        for (int i = 0; i < _routeAmmoPiles; i++)
+        for (int i = 0; i < ammoPiles; i++)
         {
-            ammoSlots.Add(Mathf.RoundToInt((i + 1f) * _caches / (_routeAmmoPiles + 1f)) - 1);
+            ammoSlots.Add(Mathf.RoundToInt((i + 1f) * caches / (ammoPiles + 1f)) - 1);
         }
 
-        for (int c = 0; c < _caches; c++)
+        for (int c = 0; c < caches; c++)
         {
             // 0~1 사이 진행도에 랜덤을 조금 섞는다.
-            float progress = (c + 0.5f + Random.Range(-0.3f, 0.3f)) / _caches;
+            float progress = (c + 0.5f + Random.Range(-0.3f, 0.3f)) / caches;
             float routeT = Mathf.Lerp(first, last, Mathf.Clamp01(progress));
             int index = Mathf.Clamp(Mathf.FloorToInt(routeT), first, last);
             Vector3 a = route[index].position;

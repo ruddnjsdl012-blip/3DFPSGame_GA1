@@ -44,6 +44,7 @@ public class FirstPersonBodyView : MonoBehaviour
     private float _kickRoll;
     private PlayerInventory _inventory;
     private PlayerGrenade _grenade;
+    private bool _hiddenForGrenade;
     private float _healBlend;
     private Animator _bodyAnimator;
     private Animator _viewAnimator;
@@ -209,14 +210,20 @@ public class FirstPersonBodyView : MonoBehaviour
         _healBlend = Mathf.MoveTowards(_healBlend, healing ? 1f : 0f, Time.deltaTime * 4f);
         float heal = Mathf.SmoothStep(0f, 1f, _healBlend);
 
-        // 수류탄을 들면 총은 화면 아래로 완전히 내린다. (오른팔은 GrenadeArmView가 따로 보여 준다)
+        // 수류탄을 들면 총은 화면 아래로 내렸다가 아예 숨긴다. (오른손과 수류탄은 GrenadeArmView가 따로 보여 준다)
         if (_grenade == null)
         {
             _grenade = GetComponent<PlayerGrenade>();
         }
 
         float grenade = _grenade != null ? Mathf.SmoothStep(0f, 1f, _grenade.EquipBlend) : 0f;
-        heal = Mathf.Max(heal, grenade * 2.2f);  // 치료 자세보다 더 많이 내린다.
+        heal = Mathf.Max(heal, grenade * 1.5f);  // 치료 자세보다 더 많이 내린다.
+        bool hideGun = grenade > 0.35f;
+        if (hideGun != _hiddenForGrenade && _calibrateFrames <= 0)
+        {
+            _hiddenForGrenade = hideGun;
+            SetViewVisible(!hideGun);
+        }
 
         // 쏠 때 총이 뒤로 튀었다가 돌아온다.
         _kick = Mathf.Lerp(_kick, 0f, 1f - Mathf.Exp(-_kickReturn * Time.deltaTime));

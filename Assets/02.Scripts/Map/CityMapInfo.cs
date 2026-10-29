@@ -14,6 +14,9 @@ public class CityMapInfo : MonoBehaviour
     [Header("좀비가 나오는 자리")]
     [SerializeField] private Transform[] _spawnPoints;
 
+    [Header("중간 안전가옥 (안에서는 좀비가 새로 나오지 않는다)")]
+    [SerializeField] private BoxCollider[] _midSafeRooms;
+
     [Header("피날레")]
     [SerializeField] private BoxCollider _finaleArea;        // 피날레 광장 범위
     [SerializeField] private Transform _extractionPoint;    // 구조 지점 (헬기장)
@@ -23,6 +26,44 @@ public class CityMapInfo : MonoBehaviour
     public Transform[] RoutePoints => _routePoints;
     public Transform[] SpawnPoints => _spawnPoints;
     public BoxCollider FinaleArea => _finaleArea;
+    public BoxCollider[] MidSafeRooms => _midSafeRooms;
+
+    // 이 자리가 중간 안전가옥 안인가?
+    public bool InMidSafeRoom(Vector3 position)
+    {
+        if (_midSafeRooms == null)
+        {
+            return false;
+        }
+
+        foreach (BoxCollider room in _midSafeRooms)
+        {
+            if (room != null && room.bounds.Contains(position + Vector3.up * 0.5f))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    // 진행 경로 전체 길이 (m) - 맵 크기에 맞춰 좀비/보급품 수를 늘릴 때 쓴다.
+    public float RouteLength
+    {
+        get
+        {
+            float length = 0f;
+            for (int i = 0; _routePoints != null && i < _routePoints.Length - 1; i++)
+            {
+                if (_routePoints[i] != null && _routePoints[i + 1] != null)
+                {
+                    length += Vector3.Distance(_routePoints[i].position, _routePoints[i + 1].position);
+                }
+            }
+
+            return length;
+        }
+    }
     public Transform ExtractionPoint => _extractionPoint;
 
     // 진행 경로에서 가장 가까운 지점의 번호 (0 = 출발, 마지막 = 피날레)

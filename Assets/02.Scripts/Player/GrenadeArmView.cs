@@ -1,38 +1,32 @@
 using System.Collections.Generic;
 using UnityEngine;
 
-// 수류탄을 들었을 때 화면에 보이는 '오른팔만' (PlayerGrenade가 붙인다)
+// 수류탄을 들었을 때 화면에 보이는 '오른손 + 수류탄' (PlayerGrenade가 붙인다)
 //
-//  - 1인칭 모델(FirstPersonBodyView)을 하나 더 복제해서, 오른쪽 아래팔과 손만 남긴다. (왼팔과 총은 지운다)
-//  - 오른손에 수류탄(내 Bomb 프리팹 모양)을 쥐어 준다.
-//  - 동작 파일 없이 뼈를 돌려서 움직인다:
-//      들기     : 손을 화면 오른쪽 아래에 든다.
-//      힘 모으기: 팔을 뒤로 높이 젖힌다. (오래 누를수록 더 젖힌다)
-//      던지기   : 팔을 앞으로 크게 휘두른다.
-//    뼈를 '카메라 기준'으로 돌리므로 모델의 뼈 축 방향과 상관없이 같은 방향으로 움직인다.
-//  - 그림자를 만드는 몸(3인칭)의 오른팔도 같이 돌린다.
-// 팔 위치가 어색하면 플레이 중 인스펙터의 각도 값을 바꿔 맞춘다.
+//  - 1인칭 모델(FirstPersonBodyView)을 하나 더 복제해서 오른손과 손목 쪽 팔만 남긴다. (왼팔, 총은 지운다)
+//  - 손에는 코드로 만든 수류탄 모양(GrenadeModel)을 쥐어 준다.
+//  - 팔은 '손이 갈 자리'를 정해 주면 어깨/팔꿈치를 알아서 굽히는 방식(2관절 IK)으로 움직인다.
+//      들기     : 손이 화면 오른쪽 아래
+//      힘 모으기: 손이 오른쪽 귀 옆 뒤로 (오래 누를수록 더 뒤로)
+//      던지기   : 손이 화면 가운데 앞으로 쭉
+//    팔꿈치는 늘 오른쪽 아래를 향해서 잘린 팔 단면이 화면에 보이지 않는다.
+//  - 그림자를 만드는 몸(3인칭)의 오른팔도 같은 자리로 움직인다.
+// 손 위치가 어색하면 플레이 중 인스펙터의 Hold / Wind Up / Throw 값(카메라 기준 x 오른쪽, y 위, z 앞)을 바꿔 맞춘다.
 public class GrenadeArmView : MonoBehaviour
 {
-    [Header("들고 있을 때 (도, 카메라 기준)")]
-    [SerializeField] private float _holdUpperPitch = 12f;    // +: 팔을 아래로, -: 위로
-    [SerializeField] private float _holdUpperYaw = -6f;      // +: 바깥(오른쪽)으로, -: 안쪽으로
-    [SerializeField] private float _holdLowerPitch = -10f;   // 팔꿈치 굽힘
+    [Header("손이 갈 자리 (카메라 기준 m: x 오른쪽, y 위, z 앞)")]
+    [SerializeField] private Vector3 _holdTarget = new Vector3(0.17f, -0.17f, 0.36f);
+    [SerializeField] private Vector3 _windUpTarget = new Vector3(0.3f, 0.06f, 0.06f);
+    [SerializeField] private Vector3 _throwTarget = new Vector3(0.02f, -0.02f, 0.55f);
+    [SerializeField] private Vector3 _elbowHint = new Vector3(0.55f, -0.75f, -0.1f);  // 팔꿈치가 향할 쪽
 
-    [Header("힘 모으기 (뒤로 젖히기, 최대일 때)")]
-    [SerializeField] private float _windUpperPitch = -75f;
-    [SerializeField] private float _windUpperYaw = 12f;
-    [SerializeField] private float _windLowerPitch = -40f;
-
-    [Header("던지기 (앞으로 휘두르기, 최대일 때)")]
-    [SerializeField] private float _swingUpperPitch = 45f;
-    [SerializeField] private float _swingUpperYaw = -18f;
-    [SerializeField] private float _swingLowerPitch = 20f;
-
-    [Header("위치")]
-    [SerializeField] private Vector3 _offset = new Vector3(0f, 0f, 0.04f);
+    [Header("팔 모델 위치 (1인칭 모델 기준에 더함)")]
+    [SerializeField] private Vector3 _offset = new Vector3(0.04f, -0.02f, 0.12f);
     [SerializeField] private float _handRadius = 0.2f;  // 손에서 이보다 먼 메시(총)는 지운다. (모델 크기 기준)
-    [SerializeField] private float _grenadeSize = 0.09f;
+
+    [Header("수류탄")]
+    [SerializeField] private float _grenadeHeight = 0.1f;
+    [SerializeField] private Vector3 _grenadeTilt = new Vector3(-20f, 15f, 15f);
 
     private PlayerGrenade _grenade;
     private FirstPersonBodyView _body;
@@ -42,6 +36,7 @@ public class GrenadeArmView : MonoBehaviour
     private Transform _upper;
     private Transform _lower;
     private Transform _hand;
+    private Transform _finger;
     private Renderer[] _renderers;
     private Transform _grenadeVisual;
     private bool _built;
@@ -59,12 +54,19 @@ public class GrenadeArmView : MonoBehaviour
     private void Start()
     {
         _body = GetComponent<FirstPersonBodyView>();
-        _camera = Camera.main != null ? Camera.main.transform : null;
+        Camera camera = Camera.main;
+        _camera = camera != null ? camera.transform : null;
         _bodyAnimator = GetComponentInChildren<Animator>();
         if (_bodyAnimator != null)
         {
             // 화면에 안 보여도(그림자만) 매 프레임 동작을 다시 잡아야 팔 돌리기가 쌓이지 않는다.
             _bodyAnimator.cullingMode = AnimatorCullingMode.AlwaysAnimate;
+        }
+
+        // 카메라 바로 앞의 손이 잘려 보이지 않게 (FPS 게임은 보통 0.01~0.05)
+        if (camera != null && camera.nearClipPlane > 0.05f)
+        {
+            camera.nearClipPlane = 0.05f;
         }
     }
 
@@ -93,57 +95,113 @@ public class GrenadeArmView : MonoBehaviour
 
         float blend = _grenade.EquipBlend;
         SetVisible(blend > 0.01f);
-
-        // 그림자 몸의 오른팔도 같이 (수류탄을 들었을 때만)
-        if (blend > 0.01f && _bodyAnimator != null && _bodyAnimator.isHuman)
-        {
-            ApplyPose(_bodyAnimator.GetBoneTransform(HumanBodyBones.RightUpperArm), _bodyAnimator.GetBoneTransform(HumanBodyBones.RightLowerArm), blend);
-        }
-
-        if (!_visible)
+        if (blend <= 0.01f)
         {
             return;
         }
 
-        // 들 때는 화면 아래에서 올라온다.
+        // 지금 손이 가야 할 자리 (카메라 기준) → 들 때는 화면 아래에서 올라온다.
         float rise = 1f - Mathf.SmoothStep(0f, 1f, blend);
-        _arm.localPosition = _body.NeutralLocalPosition + _offset + new Vector3(0.05f, -0.4f, 0f) * rise;
-        _arm.localRotation = Quaternion.identity;
+        Vector3 local = Vector3.Lerp(_holdTarget, _windUpTarget, Mathf.SmoothStep(0f, 1f, _grenade.WindUp));
+        local = Vector3.Lerp(local, _throwTarget, _grenade.Swing);
+        local += new Vector3(0.05f, -0.35f, -0.05f) * rise;
+        Vector3 target = _camera.TransformPoint(local);
+        Vector3 hint = _camera.TransformPoint(_elbowHint);
 
+        // 그림자 몸의 오른팔도 같은 자리로 (조금만 섞는다)
+        if (_bodyAnimator != null && _bodyAnimator.isHuman)
+        {
+            SolveArm(_bodyAnimator.GetBoneTransform(HumanBodyBones.RightUpperArm), _bodyAnimator.GetBoneTransform(HumanBodyBones.RightLowerArm),
+                _bodyAnimator.GetBoneTransform(HumanBodyBones.RightHand), target, hint, blend);
+        }
+
+        _arm.localPosition = _body.NeutralLocalPosition + _offset;
+        _arm.localRotation = Quaternion.identity;
         if (_animator != null)
         {
             _animator.SetFloat("MoveMotion", 0f);
         }
 
-        ApplyPose(_upper, _lower, 1f);
-
-        if (_grenadeVisual != null)
-        {
-            _grenadeVisual.gameObject.SetActive(_grenade.GrenadeInHand);
-        }
+        SolveArm(_upper, _lower, _hand, target, hint, 1f);
+        PlaceGrenade();
     }
 
-    // 들기 + 젖히기 + 휘두르기를 섞어서 오른팔 뼈를 돌린다.
-    private void ApplyPose(Transform upper, Transform lower, float weight)
+    // ===================== 2관절 IK: 손을 target에, 팔꿈치는 hint 쪽으로 =====================
+
+    private static void SolveArm(Transform upper, Transform lower, Transform hand, Vector3 target, Vector3 hint, float weight)
     {
-        if (upper == null)
+        if (upper == null || lower == null || hand == null || weight <= 0f)
         {
             return;
         }
 
-        float wind = _grenade.WindUp;
-        float swing = _grenade.Swing;
-        float upperPitch = (_holdUpperPitch + _windUpperPitch * wind + _swingUpperPitch * swing) * weight;
-        float upperYaw = (_holdUpperYaw + _windUpperYaw * wind + _swingUpperYaw * swing) * weight;
-        float lowerPitch = (_holdLowerPitch + _windLowerPitch * wind + _swingLowerPitch * swing) * weight;
-
-        Vector3 right = _camera.right;
-        Vector3 up = _camera.up;
-        upper.rotation = Quaternion.AngleAxis(upperPitch, right) * Quaternion.AngleAxis(upperYaw, up) * upper.rotation;
-        if (lower != null)
+        Vector3 a = upper.position;
+        Vector3 b = lower.position;
+        Vector3 c = hand.position;
+        float upperLength = Vector3.Distance(a, b);
+        float lowerLength = Vector3.Distance(b, c);
+        if (upperLength < 0.0001f || lowerLength < 0.0001f)
         {
-            lower.rotation = Quaternion.AngleAxis(lowerPitch, right) * lower.rotation;
+            return;
         }
+
+        // 다른 자세와 섞을 때를 위해 손이 갈 자리를 지금 손 위치와 섞는다.
+        target = Vector3.Lerp(c, target, weight);
+        float reach = Mathf.Clamp(Vector3.Distance(a, target), 0.01f, (upperLength + lowerLength) * 0.999f);
+
+        // 1. 팔꿈치 굽힘: 어깨~손 거리가 reach가 되도록
+        float currentAC = Vector3.Distance(a, c);
+        float currentElbow = Vector3.Angle(a - b, c - b);
+        float wantedElbow = Mathf.Acos(Mathf.Clamp((upperLength * upperLength + lowerLength * lowerLength - reach * reach) / (2f * upperLength * lowerLength), -1f, 1f)) * Mathf.Rad2Deg;
+        Vector3 bendAxis = Vector3.Cross(b - a, c - b);
+        if (bendAxis.sqrMagnitude < 0.000001f)
+        {
+            bendAxis = Vector3.Cross(b - a, hint - a);  // 팔이 쭉 펴져 있으면 hint 쪽으로 굽힌다.
+        }
+
+        if (bendAxis.sqrMagnitude > 0.000001f && currentAC > 0.0001f)
+        {
+            lower.rotation = Quaternion.AngleAxis(currentElbow - wantedElbow, bendAxis.normalized) * lower.rotation;
+        }
+
+        // 2. 어깨를 돌려 손이 target 쪽을 향하게
+        c = hand.position;
+        upper.rotation = Quaternion.FromToRotation(c - a, target - a) * upper.rotation;
+
+        // 3. 어깨~손 축을 중심으로 돌려 팔꿈치가 hint 쪽을 향하게
+        Vector3 axis = (target - a).normalized;
+        Vector3 elbowDir = Vector3.ProjectOnPlane(lower.position - a, axis);
+        Vector3 hintDir = Vector3.ProjectOnPlane(hint - a, axis);
+        if (elbowDir.sqrMagnitude > 0.000001f && hintDir.sqrMagnitude > 0.000001f)
+        {
+            float twist = Vector3.SignedAngle(elbowDir, hintDir, axis);
+            upper.rotation = Quaternion.AngleAxis(twist, axis) * upper.rotation;
+        }
+    }
+
+    // 수류탄은 손바닥 자리에, 늘 반듯하게 (카메라 기준으로 살짝 기울여서)
+    private void PlaceGrenade()
+    {
+        if (_grenadeVisual == null)
+        {
+            return;
+        }
+
+        bool show = _grenade.GrenadeInHand;
+        if (_grenadeVisual.gameObject.activeSelf != show)
+        {
+            _grenadeVisual.gameObject.SetActive(show);
+        }
+
+        if (!show || _hand == null)
+        {
+            return;
+        }
+
+        Vector3 palm = _finger != null ? Vector3.Lerp(_hand.position, _finger.position, 0.7f) : _hand.position + _camera.forward * 0.05f;
+        _grenadeVisual.rotation = _camera.rotation * Quaternion.Euler(_grenadeTilt);
+        // 수류탄 몸통 가운데(높이의 40%)가 손바닥에 오게
+        _grenadeVisual.position = palm - _grenadeVisual.up * (_grenadeHeight * 0.4f) + _camera.up * 0.01f;
     }
 
     private void SetVisible(bool visible)
@@ -162,13 +220,13 @@ public class GrenadeArmView : MonoBehaviour
             }
         }
 
-        if (_grenadeVisual != null)
+        if (_grenadeVisual != null && !visible)
         {
-            _grenadeVisual.gameObject.SetActive(visible);
+            _grenadeVisual.gameObject.SetActive(false);
         }
     }
 
-    // ===================== 오른팔 모델 만들기 =====================
+    // ===================== 오른손 모델 만들기 =====================
 
     private void Build()
     {
@@ -189,7 +247,7 @@ public class GrenadeArmView : MonoBehaviour
         _animator = copy.GetComponent<Animator>();
         if (_animator == null || !_animator.isHuman)
         {
-            Debug.LogWarning("[GrenadeArmView] 1인칭 모델이 Humanoid가 아니라 오른팔 동작을 만들 수 없습니다.");
+            Debug.LogWarning("[GrenadeArmView] 1인칭 모델이 Humanoid가 아니라 오른팔을 만들 수 없습니다.");
             Destroy(copy);
             _built = false;
             return;
@@ -199,14 +257,24 @@ public class GrenadeArmView : MonoBehaviour
         _upper = _animator.GetBoneTransform(HumanBodyBones.RightUpperArm);
         _lower = _animator.GetBoneTransform(HumanBodyBones.RightLowerArm);
         _hand = _animator.GetBoneTransform(HumanBodyBones.RightHand);
+        _finger = _animator.GetBoneTransform(HumanBodyBones.RightMiddleProximal);
 
         KeepRightHandOnly(copy);
-        AttachGrenade();
+
+        _grenadeVisual = GrenadeModel.Create(_grenadeHeight).transform;
+        _grenadeVisual.name = "GrenadeInHand";
+        _grenadeVisual.SetParent(_camera, true);
+        foreach (Renderer renderer in _grenadeVisual.GetComponentsInChildren<Renderer>(true))
+        {
+            renderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+        }
+
+        _grenadeVisual.gameObject.SetActive(false);
         _visible = true;
         SetVisible(false);
     }
 
-    // 오른쪽 아래팔과 손에 붙은 삼각형만 남기고, 손에서 먼 부분(총)도 지운다.
+    // 손과 손목 쪽 아래팔만 남긴다. (손에서 먼 총 부분, 팔꿈치 쪽은 지운다)
     private void KeepRightHandOnly(GameObject copy)
     {
         HashSet<Transform> keep = new HashSet<Transform>();
@@ -274,10 +342,14 @@ public class GrenadeArmView : MonoBehaviour
                 continue;
             }
 
-            // 손목~손가락은 손 근처만, 아래팔은 팔꿈치~손목 사이만 (멀리 있는 총 부분은 버린다)
             Vector3 world = skin[index].MultiplyPoint3x4(vertices[v]);
-            float toSegment = DistanceToSegment(world, elbow, hand);
-            keepVertex[v] = Vector3.Distance(world, hand) < radius || toSegment < radius * 0.6f;
+
+            // 아래팔은 손목 쪽 60%만 (팔꿈치 쪽 잘린 단면이 보이지 않게)
+            Vector3 forearm = hand - elbow;
+            float along = forearm.sqrMagnitude > 0.000001f ? Vector3.Dot(world - elbow, forearm) / forearm.sqrMagnitude : 1f;
+            bool nearHand = Vector3.Distance(world, hand) < radius;
+            bool wristSide = along > 0.4f && DistanceToSegment(world, elbow, hand) < radius * 0.6f;
+            keepVertex[v] = nearHand || wristSide;
         }
 
         Mesh trimmed = Instantiate(source);
@@ -309,76 +381,5 @@ public class GrenadeArmView : MonoBehaviour
         Vector3 ab = b - a;
         float t = ab.sqrMagnitude > 0.000001f ? Mathf.Clamp01(Vector3.Dot(p - a, ab) / ab.sqrMagnitude) : 0f;
         return Vector3.Distance(p, a + ab * t);
-    }
-
-    // 손바닥 쪽에 수류탄을 쥐어 준다. (내 Bomb 프리팹의 모양만 복사)
-    private void AttachGrenade()
-    {
-        if (_hand == null)
-        {
-            return;
-        }
-
-        PlayerBombFire bombFire = FindAnyObjectByType<PlayerBombFire>();
-        GameObject visual = null;
-        if (bombFire != null && bombFire.BombPrefab != null)
-        {
-            visual = Instantiate(bombFire.BombPrefab.gameObject);
-            // 모양만 남긴다. (부딪히면 터지는 스크립트, 물리, 충돌은 지운다)
-            foreach (MonoBehaviour script in visual.GetComponentsInChildren<MonoBehaviour>(true))
-            {
-                DestroyImmediate(script);
-            }
-
-            foreach (Rigidbody body in visual.GetComponentsInChildren<Rigidbody>(true))
-            {
-                DestroyImmediate(body);
-            }
-
-            foreach (Collider collider in visual.GetComponentsInChildren<Collider>(true))
-            {
-                DestroyImmediate(collider);
-            }
-        }
-
-        if (visual == null)
-        {
-            visual = GameObject.CreatePrimitive(PrimitiveType.Sphere);
-            DestroyImmediate(visual.GetComponent<Collider>());
-        }
-
-        visual.name = "GrenadeInHand";
-        foreach (Renderer renderer in visual.GetComponentsInChildren<Renderer>(true))
-        {
-            renderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
-        }
-
-        // 크기 맞추기
-        Bounds bounds = new Bounds(visual.transform.position, Vector3.zero);
-        bool found = false;
-        foreach (Renderer renderer in visual.GetComponentsInChildren<Renderer>(true))
-        {
-            if (!found)
-            {
-                bounds = renderer.bounds;
-                found = true;
-            }
-            else
-            {
-                bounds.Encapsulate(renderer.bounds);
-            }
-        }
-
-        float size = found ? Mathf.Max(bounds.size.x, bounds.size.y, bounds.size.z) : 1f;
-        visual.transform.localScale *= _grenadeSize / Mathf.Max(0.001f, size);
-
-        // 손가락 쪽으로 조금 나간 자리 (손바닥)
-        Transform finger = _animator.GetBoneTransform(HumanBodyBones.RightMiddleProximal);
-        Vector3 palm = finger != null ? Vector3.Lerp(_hand.position, finger.position, 0.8f) : _hand.position + _camera.forward * 0.05f;
-        palm -= _camera.up * 0.025f;
-        visual.transform.SetParent(_hand, true);
-        visual.transform.position = palm;
-        _grenadeVisual = visual.transform;
-        visual.SetActive(false);
     }
 }

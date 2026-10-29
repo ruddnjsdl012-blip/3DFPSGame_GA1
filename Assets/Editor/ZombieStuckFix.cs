@@ -92,6 +92,18 @@ public static class ZombieStuckFix
         EditorUtility.DisplayDialog("좀비 끼임 고치기", body, "확인");
     }
 
+    // 도시 맵 만들기(CityMapBuilder)가 맵을 다 만든 뒤 부른다. (창 없이, 씬 저장은 만들기 쪽에서)
+    public static List<string> PrepareAndBake(CityMapInfo map)
+    {
+        List<string> log = new List<string>();
+        int colliders = AddMissingColliders(map.transform, out List<string> examples);
+        log.Add("✔ 콜라이더가 없던 모델 " + colliders + "개에 Box Collider (좀비가 모델 속으로 길을 찾지 않게)");
+        int obstacles = SetupBreakables(map.gameObject.scene);
+        log.Add("✔ 드럼통/상자 " + obstacles + "개: NavMesh Obstacle(Carve)");
+        log.Add(Rebake(map.gameObject));
+        return log;
+    }
+
     // ---------- 1. 콜라이더 ----------
     private static int AddMissingColliders(Transform root, out List<string> examples)
     {
