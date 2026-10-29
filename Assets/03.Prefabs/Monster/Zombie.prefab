@@ -93,7 +93,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!224 &3517223835469690128
 RectTransform:
   m_ObjectHideFlags: 0
@@ -332,10 +332,16 @@ MonoBehaviour:
   _attackDamage: 10
   _attackRange: 1.5
   _attackInterval: 1.2
-  _moveSpeed: 5
+  _moveSpeed: 7.6
   _maxHealth: 30
   _health: 30
   _alwaysChase: 1
+  _closeRepathInterval: 0.07
+  _closeRepathDistance: 12
+  _repathInterval: 0.15
+  _farRepathInterval: 0.3
+  _farRepathDistance: 25
+  _commonHitStun: 0.18
   _useBloodPrefab: 0
   _bloodSprayPrefab: {fileID: 1000013355911406, guid: d32aa916f50cac94db11e6f19821a58f, type: 3}
 --- !u!114 &5890396465777849555
@@ -345,7 +351,7 @@ MonoBehaviour:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 4738154138994349144}
-  m_Enabled: 0
+  m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 92e54e3ae234ba4419e4f4bb54b20c4b, type: 3}
   m_Name: 
@@ -362,9 +368,9 @@ NavMeshAgent:
   m_AgentTypeID: 0
   m_Radius: 0.25
   m_Speed: 3.5
-  m_Acceleration: 8
+  m_Acceleration: 28
   avoidancePriority: 50
-  m_AngularSpeed: 359
+  m_AngularSpeed: 900
   m_StoppingDistance: 0.7
   m_AutoTraverseOffMeshLink: 1
   m_AutoBraking: 0
