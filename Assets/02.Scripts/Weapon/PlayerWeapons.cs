@@ -93,7 +93,7 @@ public class PlayerWeapons : MonoBehaviour
 
         UpdateSwitch(Time.deltaTime);
 
-        // 수류탄을 던졌거나(또는 오른쪽 클릭으로 내렸으면) 전에 쓰던 무기로
+        // 수류탄을 던졌으면 전에 쓰던 무기로 (오른쪽 클릭은 밀치기)
         if (_current == WeaponSlot.Grenade && !IsSwitching && _grenade != null && !_grenade.IsEquipped)
         {
             Begin(_previous == WeaponSlot.Grenade ? WeaponSlot.Rifle : _previous, true);

@@ -61,6 +61,19 @@ public class Zombie : MonoBehaviour, IDamageable
     private float _nextPathTime;
     private Vector3 _lastDestination;
     private bool _hasDestination;
+    private float _hitRecoverTime;
+    private float _pathRequestTime;
+    private float _nextBindTime;
+    private float _nextTargetSearchTime;
+    private CharacterController _playerController;
+    private float _nextVisibilityTime;
+    private Vector3 _lastVisibilityTarget;
+    private bool _canSeePlayer;
+    private CapsuleCollider _body;
+    private Vector3 _shoveDirection;
+    private float _shoveDistance;
+    private float _shoveElapsed = 1f;
+    private const float ShoveMoveTime = 0.2f;
 
     // AI 디렉터가 만든 좀비는 거리와 상관없이 플레이어를 끝까지 쫓는다. (L4D 호드)
     private bool _isHunter = false;
@@ -73,6 +86,10 @@ public class Zombie : MonoBehaviour, IDamageable
     public float Health => _health;
     public bool IsDead => _state == ZombieState.Death;
     public ZombieState State => _state;
+    public Transform Target => _player != null ? _player.transform : null;
+    public bool CanPursue => !IsDead && _state == ZombieState.Trace && _player != null
+        && (_special == null || !_special.IsUsingAbility)
+        && GameManager.Instance != null && GameManager.Instance.State == GameState.Playing;
 
     // 좀비가 죽는 순간 발행하는 이벤트 (스포너, UI 등이 구독한다)
     public event Action<Zombie> Died;
@@ -86,14 +103,18 @@ public class Zombie : MonoBehaviour, IDamageable
     private void Start()
     {
         _health = _maxHealth;
+        // 이 프로젝트의 좀비는 스폰 위치로 돌아가지 않고 항상 플레이어를 추격한다.
+        _alwaysChase = true;
 
         // 길을 찾아 걷게 해주는 컴포넌트 NavMeshAgent를 찾아서 참조
         _agent = GetComponent<NavMeshAgent>();
+        _body = GetComponent<CapsuleCollider>();
         _agent.speed = _moveSpeed;
 
         _animator = GetComponentInChildren<Animator>();
         if (_animator != null)
         {
+            _animator.applyRootMotion = false;
             // 상태와 공격 이벤트는 계속 계산하고, 화면 밖의 뼈 변환 작업만 줄인다.
             _animator.cullingMode = AnimatorCullingMode.CullUpdateTransforms;
         }
@@ -119,17 +140,34 @@ public class Zombie : MonoBehaviour, IDamageable
             gameObject.AddComponent<ZombieModelLock>();
         }
 
+        if (GetComponent<ZombieUnstuck>() == null)
+        {
+            gameObject.AddComponent<ZombieUnstuck>();
+        }
+
         _startPosition = transform.position;
         _groanTimer = UnityEngine.Random.Range(1f, 6f);
 
         // 게임을 시작하면 플레이어를 찾는다.
-        _player = GameObject.FindGameObjectWithTag("Player");
-        _playerDamageable = _player != null ? _player.GetComponent<IDamageable>() : null;
+        if (_player == null)
+        {
+            FindTarget();
+        }
     }
 
 
     private void Update()
     {
+        if (IsDead)
+        {
+            return;
+        }
+
+        if (_player == null && Time.time >= _nextTargetSearchTime)
+        {
+            FindTarget();
+        }
+
         if (GameManager.Instance == null || GameManager.Instance.State != GameState.Playing || _player == null)
         {
             StopAgent();
@@ -154,6 +192,16 @@ public class Zombie : MonoBehaviour, IDamageable
 
             case ZombieState.Attack:
                 Attack();
+                break;
+
+            case ZombieState.Hit:
+                UpdateShove();
+                // 코루틴이 중단되었더라도 피격 상태에 영구히 남지 않는다.
+                if (Time.time >= _hitRecoverTime)
+                {
+                    ResumeChase();
+                }
+
                 break;
         }
     }
@@ -185,7 +233,8 @@ public class Zombie : MonoBehaviour, IDamageable
             _animator.SetTrigger("Hit");
             GameSounds.PlayAt("zombie_hurt", transform.position, 0.7f, 0.1f);
             _state = ZombieState.Hit;
-            StartCoroutine(Hit_Coroutine());
+            _hitRecoverTime = Mathf.Max(_hitRecoverTime, Time.time + (_special == null ? _commonHitStun : 0.5f));
+            StopAgent();
         }
         else
         {
@@ -198,6 +247,48 @@ public class Zombie : MonoBehaviour, IDamageable
             StartCoroutine(Death_Coroutine());
         }
 
+    }
+
+    public bool TryShove(Vector3 direction, float distance, float stunTime)
+    {
+        // 탱크는 밀리지 않는다. 밀치기는 체력 피해를 주지 않는다.
+        if (IsDead || !_canStagger || _agent == null || GameManager.Instance == null
+            || GameManager.Instance.State != GameState.Playing)
+        {
+            return false;
+        }
+
+        direction.y = 0f;
+        if (direction.sqrMagnitude < 0.001f) return false;
+        _shoveDirection = direction.normalized;
+        _shoveDistance = Mathf.Max(0f, distance);
+        _shoveElapsed = 0f;
+        _state = ZombieState.Hit;
+        _hitRecoverTime = Mathf.Max(_hitRecoverTime, Time.time + Mathf.Max(ShoveMoveTime, stunTime));
+        _nextAttackTime = Mathf.Max(_nextAttackTime, _hitRecoverTime + 0.15f);
+        if (_special != null) _special.InterruptForShove(stunTime);
+        StopAgent();
+        if (_animator != null)
+        {
+            _animator.ResetTrigger("StartAttack");
+            _animator.ResetTrigger("MoveAttackDelay");
+            _animator.SetTrigger("Hit");
+        }
+
+        return true;
+    }
+
+    private void UpdateShove()
+    {
+        if (_shoveElapsed >= ShoveMoveTime) return;
+        float previous = _shoveElapsed / ShoveMoveTime;
+        _shoveElapsed = Mathf.Min(ShoveMoveTime, _shoveElapsed + Time.deltaTime);
+        float current = _shoveElapsed / ShoveMoveTime;
+        float step = ((1f - previous) * (1f - previous) - (1f - current) * (1f - current)) * _shoveDistance;
+        if (!ZombieNavigationClearance.TryMove(_agent, _body, _shoveDirection * step))
+        {
+            _shoveElapsed = ShoveMoveTime;
+        }
     }
 
     private void SpawnBlood(DamageInfo damageInfo)
@@ -214,18 +305,14 @@ public class Zombie : MonoBehaviour, IDamageable
         BloodEffects.Hit(this, damageInfo);
     }
 
-    private IEnumerator Hit_Coroutine()
-    {
-        StopAgent();
-        yield return new WaitForSeconds(_special == null ? _commonHitStun : 0.5f);
-
-        // 일반 좀비는 짧게 움찔한 뒤 현재 플레이어 위치를 곧바로 다시 노린다.
-        ResumeChase();
-    }
-
     private IEnumerator Death_Coroutine()
     {
         StopAgent();
+        if (_agent != null)
+        {
+            _agent.enabled = false;
+        }
+
         yield return new WaitForSeconds(2f);
         Destroy(gameObject);
     }
@@ -233,8 +320,6 @@ public class Zombie : MonoBehaviour, IDamageable
     // 대기: 제자리에서 플레이어를 기다린다.
     private void Idle()
     {
-        StopAgent();
-
         // 플레이어 가까워지면 Trace 상태로 전이한다.
         float distanceSquared = (transform.position - _player.transform.position).sqrMagnitude;
         if (_isHunter || _alwaysChase || distanceSquared <= _detectDistance * _detectDistance)
@@ -256,7 +341,7 @@ public class Zombie : MonoBehaviour, IDamageable
         }
 
         // 플레이어가 공격 거리 안이면 공격한다.
-        if ((transform.position - _player.transform.position).sqrMagnitude <= _attackRange * _attackRange)
+        if (CanReachPlayer(_attackRange))
         {
             _animator.ResetTrigger("AttackMove");
             _animator.SetTrigger("MoveAttackDelay");
@@ -274,6 +359,12 @@ public class Zombie : MonoBehaviour, IDamageable
     // 복귀: 처음 자리로 돌아간다.
     private void Comeback()
     {
+        if (_alwaysChase || _isHunter)
+        {
+            ResumeChase();
+            return;
+        }
+
         // 처음 자리에 도착하면 Idle
         if ((transform.position - _startPosition).sqrMagnitude < _agent.stoppingDistance * _agent.stoppingDistance)
         {
@@ -289,11 +380,9 @@ public class Zombie : MonoBehaviour, IDamageable
     // 공격: 일정 시간마다 플레이어를 때린다.
     private void Attack()
     {
-        StopAgent();
-
         // 플레이어가 공격 사정 거리 밖으로 나가면 쫓아!
         float distanceSquared = (transform.position - _player.transform.position).sqrMagnitude;
-        if (distanceSquared > _attackRange * _attackRange)
+        if (!CanReachPlayer(_attackRange))
         {
             ResumeChase();
             return;
@@ -301,7 +390,19 @@ public class Zombie : MonoBehaviour, IDamageable
 
         if (_special != null && _special.IsUsingAbility)
         {
+            StopAgent();
             return;
+        }
+
+        // 공격을 준비하는 동안에도 접촉 거리까지 붙는다.
+        float contactRange = Mathf.Max(0.8f, _agent.stoppingDistance);
+        if (distanceSquared > contactRange * contactRange)
+        {
+            RequestPath(_player.transform.position);
+        }
+        else
+        {
+            StopAgent();
         }
 
         Vector3 look = _player.transform.position - transform.position;
@@ -330,7 +431,7 @@ public class Zombie : MonoBehaviour, IDamageable
         }
 
         float reach = _attackRange + 0.15f;
-        if ((transform.position - _player.transform.position).sqrMagnitude > reach * reach
+        if (!CanReachPlayer(reach, true)
             || (_special != null && _special.IsUsingAbility))
         {
             return;
@@ -374,6 +475,50 @@ public class Zombie : MonoBehaviour, IDamageable
         _nextPathTime = 0f;
     }
 
+    public void SetTarget(Transform target)
+    {
+        _player = target != null ? target.gameObject : null;
+        _playerController = _player != null ? _player.GetComponent<CharacterController>() : null;
+        _playerDamageable = _player != null ? _player.GetComponent<IDamageable>() : null;
+        _hasDestination = false;
+        _nextPathTime = 0f;
+    }
+
+    private void FindTarget()
+    {
+        _nextTargetSearchTime = Time.time + 1f;
+        PlayerMove playerMove = FindAnyObjectByType<PlayerMove>();
+        GameObject player = playerMove != null ? playerMove.gameObject : GameObject.FindGameObjectWithTag("Player");
+        SetTarget(player != null ? player.transform : null);
+    }
+
+    private bool CanReachPlayer(float range, bool forceVisibility = false)
+    {
+        if (_player == null || (transform.position - _player.transform.position).sqrMagnitude > range * range)
+        {
+            return false;
+        }
+
+        if (!forceVisibility && Time.time < _nextVisibilityTime
+            && (_player.transform.position - _lastVisibilityTarget).sqrMagnitude < 0.04f)
+        {
+            return _canSeePlayer;
+        }
+
+        _nextVisibilityTime = Time.time + 0.08f;
+        _lastVisibilityTarget = _player.transform.position;
+        Vector3 from = transform.position + Vector3.up * 0.5f;
+        Vector3 target = _playerController != null ? _playerController.bounds.center : _player.transform.position;
+        if (Physics.Linecast(from, target, out RaycastHit hit, ~(1 << gameObject.layer), QueryTriggerInteraction.Ignore))
+        {
+            _canSeePlayer = hit.transform == _player.transform || hit.transform.IsChildOf(_player.transform);
+            return _canSeePlayer;
+        }
+
+        _canSeePlayer = true;
+        return true;
+    }
+
     // 특수 좀비 능력치. Instantiate 바로 뒤(Start 전에) 부른다. (SpecialZombie가 부른다)
     public void SetupSpecial(float maxHealth, float moveSpeed, float attackDamage, float attackRange, float attackInterval, bool canStagger)
     {
@@ -392,18 +537,18 @@ public class Zombie : MonoBehaviour, IDamageable
 
     private void StopAgent()
     {
-        if (_agent == null || !_agent.enabled || !_agent.isOnNavMesh || _agent.isStopped)
+        if (_agent == null || !_agent.enabled || !_agent.isOnNavMesh)
         {
             return;
         }
 
-        _agent.isStopped = true;
-        if (_agent.hasPath || _agent.pathPending)
+        if (!_agent.isStopped)
         {
-            _agent.ResetPath();
+            _agent.isStopped = true;
+            _agent.velocity = Vector3.zero;
         }
 
-        _agent.velocity = Vector3.zero;
+        // 공격/피격 때문에 멈출 때 유효한 이동 경로까지 지우지 않는다.
         _hasDestination = false;
     }
 
@@ -441,17 +586,42 @@ public class Zombie : MonoBehaviour, IDamageable
 
     private void RequestPath(Vector3 destination, bool force = false)
     {
-        if (_agent == null || !_agent.enabled || !_agent.isOnNavMesh || _agent.pathPending
-            || (_special != null && _special.IsUsingAbility))
+        if ((_special != null && _special.IsUsingAbility) || !EnsureNavigation())
         {
             return;
+        }
+
+        // 경로 계산 대기와 무관하게, 추격 상태에서는 먼저 이동 정지를 해제한다.
+        bool wasStopped = _agent.isStopped;
+        _agent.isStopped = false;
+        _agent.speed = _moveSpeed;
+        if (_agent.pathPending)
+        {
+            if (Time.time - _pathRequestTime < 2f)
+            {
+                return;
+            }
+
+            _agent.ResetPath();
+            _hasDestination = false;
+            force = true;
+        }
+
+        if (_player != null)
+        {
+            if (!ZombieNavigationTarget.TryGet(_player.transform, _agent.agentTypeID, _agent.areaMask,
+                gameObject.layer, out destination))
+            {
+                _nextPathTime = Time.time + 0.2f;
+                return;
+            }
         }
 
         float distanceSquared = (transform.position - destination).sqrMagnitude;
         bool targetMoved = !_hasDestination || (destination - _lastDestination).sqrMagnitude >= 0.01f;
         bool reachedOldTarget = _hasDestination && targetMoved && (!_agent.hasPath
             || _agent.remainingDistance <= _agent.stoppingDistance + 0.35f);
-        if (!force && !reachedOldTarget && Time.time < _nextPathTime)
+        if (!force && !wasStopped && !reachedOldTarget && Time.time < _nextPathTime)
         {
             return;
         }
@@ -459,10 +629,9 @@ public class Zombie : MonoBehaviour, IDamageable
         float interval = distanceSquared <= _closeRepathDistance * _closeRepathDistance ? _closeRepathInterval
             : distanceSquared > _farRepathDistance * _farRepathDistance ? _farRepathInterval : _repathInterval;
         _nextPathTime = Time.time + Mathf.Max(0.03f, interval) + UnityEngine.Random.Range(0f, 0.01f);
-        _agent.isStopped = false;
-
         // 이전 목적지에 도착하면 갱신 타이머를 기다리지 않는다. 정지한 목표의 경로만 재사용한다.
-        if (_hasDestination && _agent.hasPath && !_agent.isPathStale && !targetMoved)
+        if (!force && !wasStopped && _hasDestination && _agent.hasPath && !_agent.isPathStale
+            && _agent.pathStatus == NavMeshPathStatus.PathComplete && !targetMoved)
         {
             return;
         }
@@ -471,6 +640,55 @@ public class Zombie : MonoBehaviour, IDamageable
         {
             _lastDestination = destination;
             _hasDestination = true;
+            _pathRequestTime = Time.time;
         }
+        else
+        {
+            _hasDestination = false;
+        }
+    }
+
+    private bool EnsureNavigation()
+    {
+        if (_agent == null)
+        {
+            return false;
+        }
+
+        if (!_agent.enabled)
+        {
+            _agent.enabled = true;
+        }
+
+        if (_agent.isOnNavMesh)
+        {
+            return true;
+        }
+
+        if (Time.time < _nextBindTime)
+        {
+            return false;
+        }
+
+        _nextBindTime = Time.time + 0.5f;
+        if (!ZombieNavigationClearance.TryRecoverPlacement(_agent, _body, out Vector3 root))
+        {
+            return false;
+        }
+
+        _hasDestination = false;
+        return _agent.Warp(root) && _agent.isOnNavMesh;
+    }
+
+    public void RefreshPursuit()
+    {
+        if (!CanPursue)
+        {
+            return;
+        }
+
+        _hasDestination = false;
+        _nextPathTime = 0f;
+        RequestPath(_player.transform.position, true);
     }
 }

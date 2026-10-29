@@ -1,49 +1,44 @@
 using UnityEngine;
 using UnityEngine.AI;
 
-// 좀비가 어딘가에 끼어서 못 움직이면 빼 준다. (AIDirector가 만든 좀비에 붙는다)
-//  - NavMesh 밖에 있으면(벽 속에 생겼거나 밀려났을 때) 가장 가까운 NavMesh 위로 옮긴다.
-//  - 쫓아가는 중인데 2초 넘게 거의 못 움직이면:
-//      1번째: 길을 다시 찾게 하고 살짝 옆으로 비켜 준다.
-//      2번째부터: 플레이어 화면에 안 보이면 가던 길의 다음 모퉁이로 옮긴다. (보이면 조금씩만 밀어 준다)
+// 경로 대기 중/잘못 정지된 경우도 감시한다. 플레이어 쪽으로 순간이동시키지 않는다.
 public class ZombieUnstuck : MonoBehaviour
 {
-    [SerializeField] private float _checkInterval = 0.5f;
-    [SerializeField] private float _stuckTime = 2f;          // 이만큼 못 움직이면 끼었다고 본다.
-    [SerializeField] private float _minMove = 0.35f;         // 그동안 이보다 덜 움직였으면
+    [SerializeField, Min(0.1f)] private float _checkInterval = 0.25f;
+    [SerializeField, Min(0.5f)] private float _stuckTime = 1f;
+    [SerializeField, Min(0.05f)] private float _minMove = 0.15f;
 
     private NavMeshAgent _agent;
     private Zombie _zombie;
-    private Transform _player;
-    private Camera _camera;
+    private CapsuleCollider _body;
     private Vector3 _lastPosition;
     private float _checkTimer;
     private float _stillTime;
-    private int _strikes;
+    private float _side;
+    private int _normalPriority;
+    private float _priorityUntil;
 
     private void Start()
     {
         _agent = GetComponent<NavMeshAgent>();
         _zombie = GetComponent<Zombie>();
-        GameObject player = GameObject.FindGameObjectWithTag("Player");
-        _player = player != null ? player.transform : null;
-        _camera = Camera.main;
+        _body = GetComponent<CapsuleCollider>();
         _lastPosition = transform.position;
         _checkTimer = Random.Range(0f, Mathf.Max(0.1f, _checkInterval));
+        _side = Random.value < 0.5f ? -1f : 1f;
 
-        // 붐비는 곳에서 서로 밀어 벽으로 끼지 않게: 좋은 회피, 그리고 서로 다른 우선순위
         if (_agent != null)
         {
             _agent.obstacleAvoidanceType = ObstacleAvoidanceType.MedQualityObstacleAvoidance;
-            _agent.avoidancePriority = Random.Range(30, 70);
+            _normalPriority = Random.Range(30, 70);
+            _agent.avoidancePriority = _normalPriority;
             _agent.autoRepath = true;
         }
     }
 
     private void Update()
     {
-        if (_agent == null || _zombie == null || _player == null || _zombie.IsDead || !_agent.enabled
-            || GameManager.Instance == null || GameManager.Instance.State != GameState.Playing)
+        if (_agent == null || _zombie == null)
         {
             return;
         }
@@ -54,112 +49,84 @@ public class ZombieUnstuck : MonoBehaviour
             return;
         }
 
-        _checkTimer = _checkInterval;
-
-        // 1. NavMesh 밖이면 가까운 NavMesh 위로
-        if (!_agent.isOnNavMesh)
-        {
-            if (NavMesh.SamplePosition(transform.position, out NavMeshHit hit, 4f, NavMesh.AllAreas))
-            {
-                _agent.Warp(hit.position);
-            }
-
-            return;
-        }
-
-        // 2. 쫓아가는 중에만 끼임을 본다. (공격, 멈칫, 대기 중에는 멈춰 있는 게 정상)
-        bool chasing = _zombie.State == ZombieState.Trace && !_agent.isStopped && !_agent.pathPending;
-        float toPlayer = Vector3.Distance(transform.position, _player.position);
-        float moved = Vector3.Distance(Flat(transform.position), Flat(_lastPosition));
+        float interval = Mathf.Max(0.1f, _checkInterval);
+        _checkTimer = interval;
+        Vector3 moved = transform.position - _lastPosition;
+        moved.y = 0f;
         _lastPosition = transform.position;
 
-        if (!chasing || toPlayer < 3f || moved > _minMove * (_checkInterval / _stuckTime) * 2f)
+        // 피격/사망/특수 능력 사용처럼 의도적으로 멈춘 동안은 건드리지 않는다.
+        if (!_zombie.CanPursue)
         {
             _stillTime = 0f;
-            if (moved > 1f)
-            {
-                _strikes = 0;
-            }
-
             return;
         }
 
-        _stillTime += _checkInterval;
-        if (_stillTime < _stuckTime)
+        if (!_agent.enabled || !_agent.isOnNavMesh)
+        {
+            _zombie.RefreshPursuit();
+            return;
+        }
+
+        if (_agent.isOnOffMeshLink)
+        {
+            _stillTime = 0f;
+            return;
+        }
+
+        if (Time.time >= _priorityUntil && _agent.avoidancePriority != _normalPriority)
+        {
+            _agent.avoidancePriority = _normalPriority;
+        }
+
+        // NavMesh와 실제 프랍 사이의 겹침도 검사한다.
+        if (ZombieNavigationClearance.TrySeparate(_agent, _body))
+        {
+            _stillTime = 0f;
+            _zombie.RefreshPursuit();
+            return;
+        }
+
+        float minimumStep = _minMove * interval / 0.5f;
+        if (moved.sqrMagnitude > minimumStep * minimumStep)
+        {
+            _stillTime = 0f;
+            return;
+        }
+
+        // isStopped/pathPending 자체가 문제일 수도 있으므로 이 조건들로 감시를 생략하지 않는다.
+        _stillTime += interval;
+        if (_stillTime < Mathf.Max(0.5f, _stuckTime))
         {
             return;
         }
 
         _stillTime = 0f;
-        _strikes++;
-        Unstick();
+        // 서로 양보만 하며 통로에 머무는 군중에는 잠깐 다른 회피 우선순위를 준다.
+        _agent.avoidancePriority = Random.Range(10, 25);
+        _priorityUntil = Time.time + 0.8f;
+        if (!_agent.pathPending && !_agent.isStopped)
+        {
+            TrySmallStep();
+        }
+
+        _zombie.RefreshPursuit();
     }
 
-    private void Unstick()
+    private void TrySmallStep()
     {
-        Vector3 next = NextCorner();
-        Vector3 toward = Flat(next - transform.position);
+        Vector3 toward = _agent.hasPath ? _agent.steeringTarget - transform.position
+            : _zombie.Target.position - transform.position;
+        toward.y = 0f;
         toward = toward.sqrMagnitude > 0.01f ? toward.normalized : transform.forward;
-
-        if (_strikes == 1 || IsVisible())
+        // 양옆과 뒤쪽을 순서대로 검사한다. NavMesh와 실제 충돌이 모두 허용한 방향만 쓴다.
+        for (int i = 0; i < 4; i++)
         {
-            // 살짝 옆(모퉁이 쪽)으로 비켜 주고 길을 다시 찾는다.
-            Vector3 side = Vector3.Cross(Vector3.up, toward) * (Random.value < 0.5f ? -1f : 1f);
-            Vector3 nudge = transform.position + toward * 0.6f + side * 0.5f;
-            if (NavMesh.SamplePosition(nudge, out NavMeshHit hit, 1.5f, NavMesh.AllAreas))
-            {
-                _agent.Warp(hit.position);
-            }
-
-            _agent.ResetPath();
-            _agent.SetDestination(_player.position);
-            return;
+            float angle = (i < 2 ? 65f : 115f) * (i % 2 == 0 ? _side : -_side);
+            Vector3 step = Quaternion.AngleAxis(angle, Vector3.up) * toward * 0.55f;
+            if (ZombieNavigationClearance.TryMove(_agent, _body, step)) break;
         }
 
-        // 안 보이면 가던 길의 다음 모퉁이로 옮긴다.
-        if (NavMesh.SamplePosition(next, out NavMeshHit corner, 2f, NavMesh.AllAreas))
-        {
-            _agent.Warp(corner.position);
-            _agent.SetDestination(_player.position);
-        }
-    }
-
-    private Vector3 NextCorner()
-    {
-        if (_agent.hasPath && !_agent.pathPending)
-        {
-            // path/corners 복사 대신 에이전트가 이미 계산한 다음 모퉁이를 쓴다.
-            return _agent.steeringTarget;
-        }
-
-        return _player.position;
-    }
-
-    private bool IsVisible()
-    {
-        if (_camera == null)
-        {
-            return false;
-        }
-
-        Vector3 target = transform.position + Vector3.up * 1.2f;
-        Vector3 viewport = _camera.WorldToViewportPoint(target);
-        if (viewport.z <= 0f || viewport.x < -0.05f || viewport.x > 1.05f || viewport.y < -0.05f || viewport.y > 1.05f)
-        {
-            return false;
-        }
-
-        if (Physics.Linecast(_camera.transform.position, target, out RaycastHit hit, ~0, QueryTriggerInteraction.Ignore))
-        {
-            return hit.transform == transform || hit.transform.IsChildOf(transform);
-        }
-
-        return true;
-    }
-
-    private static Vector3 Flat(Vector3 value)
-    {
-        value.y = 0f;
-        return value;
+        _side = -_side;
     }
 }

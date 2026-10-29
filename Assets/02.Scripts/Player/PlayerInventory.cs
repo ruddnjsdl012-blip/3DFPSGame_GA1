@@ -5,7 +5,7 @@ using UnityEngine;
 //  - E: 가까이 있는 보급품 줍기 (탄약 더미는 예비 총알을 가득 채우고 그대로 남는다)
 //  - Q: 구급상자 사용. 3초 동안 치료하고 잃은 체력의 80%를 회복한다. 치료 중에는 총을 쏠 수 없다.
 //       치료 중에 Q나 왼쪽 클릭을 누르면 취소된다.
-//  - 수류탄: 최대 3개. PlayerBombFire(우클릭)가 하나씩 쓴다.
+//  - 수류탄: 최대 3개. 4번으로 들고 왼쪽 클릭을 떼서 던진다. 우클릭은 밀치기.
 // PlayerGunFire가 Player에 자동으로 붙인다. 화면 표시는 UI_SupplyHud.
 public class PlayerInventory : MonoBehaviour
 {
@@ -39,6 +39,11 @@ public class PlayerInventory : MonoBehaviour
     public int MaxGrenades => _maxGrenades;
     public bool IsHealing => _healTimer >= 0f;
     public float HealProgress => IsHealing ? Mathf.Clamp01(_healTimer / _healTime) : 0f;
+
+    public void InterruptHealing()
+    {
+        CancelHeal(false);
+    }
 
     private void Awake()
     {

@@ -6,7 +6,7 @@ using UnityEngine.UI;
 //  - 왼쪽 클릭을 누르고 있으면 오른팔을 뒤로 젖히며 힘을 모은다. 오래 누를수록 멀리 날아간다.
 //    누르는 동안 날아갈 길(포물선)과 떨어질 자리가 보인다.
 //  - 손을 떼면 오른팔을 앞으로 휘둘러 던진다. 던지고 나면 다시 총을 든다.
-//  - 오른쪽 클릭: 힘 모으기 취소 / 총으로 돌아가기
+//  - 오른쪽 클릭: 힘 모으기를 취소하고 밀치기. 1/2/3번이나 휠로 총/도끼로 돌아간다.
 // 실제 수류탄 만들기는 PlayerBombFire.Throw()가 한다. 개수는 PlayerInventory.
 public class PlayerGrenade : MonoBehaviour
 {
@@ -37,6 +37,7 @@ public class PlayerGrenade : MonoBehaviour
     private float _timer;
     private bool _released;
     private float _throwCharge;
+    private PlayerShove _shove;
 
     private LineRenderer _arc;
     private Transform _marker;
@@ -61,6 +62,7 @@ public class PlayerGrenade : MonoBehaviour
         }
 
         _inventory = GetComponent<PlayerInventory>();
+        _shove = GetComponent<PlayerShove>();
         _arm = GrenadeArmView.Create(this);
         BuildArc();
         BuildChargeBar();
@@ -80,6 +82,13 @@ public class PlayerGrenade : MonoBehaviour
         bool mouseFree = Cursor.visible;
         bool healing = _inventory != null && _inventory.IsHealing;
 
+        if (_shove != null && _shove.IsActive && _state != State.Throwing)
+        {
+            UpdatePose(dt);
+            ShowAim(false);
+            return;
+        }
+
         switch (_state)
         {
             case State.Gun:
@@ -87,7 +96,7 @@ public class PlayerGrenade : MonoBehaviour
                 break;
 
             case State.Holding:
-                if (Input.GetButtonDown("Fire2") || healing)
+                if (healing)
                 {
                     Unequip();
                 }
@@ -102,12 +111,7 @@ public class PlayerGrenade : MonoBehaviour
 
             case State.Charging:
                 _charge = Mathf.Clamp01(_charge + dt / _chargeTime);
-                if (Input.GetButtonDown("Fire2"))
-                {
-                    _state = State.Holding;  // 취소: 다시 들고 있는 자세로
-                    _charge = 0f;
-                }
-                else if (!Input.GetButton("Fire1"))
+                if (!Input.GetButton("Fire1"))
                 {
                     BeginThrow();
                 }
@@ -163,6 +167,18 @@ public class PlayerGrenade : MonoBehaviour
     {
         _state = State.Gun;
         _charge = 0f;
+    }
+
+    public void CancelChargeForShove()
+    {
+        if (_state == State.Charging || (_state == State.Throwing && !_released))
+        {
+            _state = State.Holding;
+            _charge = 0f;
+            _timer = 0f;
+        }
+
+        ShowAim(false);
     }
 
     private void BeginThrow()

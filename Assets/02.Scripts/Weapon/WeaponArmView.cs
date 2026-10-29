@@ -28,6 +28,7 @@ public class WeaponArmView : MonoBehaviour
     private Transform _item;
     private bool _built;
     private bool _shown;
+    private PlayerShove _shove;
     private const float HandRadius = 0.2f;
 
     public Transform Item => _item;
@@ -43,6 +44,7 @@ public class WeaponArmView : MonoBehaviour
     private void Start()
     {
         _body = GetComponent<FirstPersonBodyView>();
+        _shove = GetComponent<PlayerShove>();
         _camera = Camera.main != null ? Camera.main.transform : null;
         if (_item != null && _camera != null)
         {
@@ -76,10 +78,12 @@ public class WeaponArmView : MonoBehaviour
         }
 
         float low = 1f - Mathf.SmoothStep(0f, 1f, Raise);
-        Vector3 local = HandTarget + new Vector3(0.05f, -0.35f, -0.05f) * low;
+        float shove = _shove != null ? _shove.ViewAmount : 0f;
+        Vector3 local = HandTarget + new Vector3(0.05f, -0.35f, -0.05f) * low
+            + new Vector3(-0.12f, 0.06f, 0.25f) * shove;
         Vector3 target = _camera.TransformPoint(local);
         Vector3 hint = _camera.TransformPoint(ElbowHint);
-        Quaternion rotation = _camera.rotation * Quaternion.Euler(35f * low, 0f, 0f) * ItemRotation;
+        Quaternion rotation = _camera.rotation * Quaternion.Euler(35f * low - 10f * shove, -12f * shove, -12f * shove) * ItemRotation;
 
         if (_arm != null)
         {

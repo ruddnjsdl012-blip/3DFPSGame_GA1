@@ -42,10 +42,18 @@ public class SpecialZombie : MonoBehaviour
     // Instantiate 바로 뒤에 부른다.
     public static SpecialZombie Make(Zombie zombie, SpecialType type)
     {
+        NavMeshAgent agent = zombie.GetComponent<NavMeshAgent>();
+        Vector3 feet = zombie.transform.position;
+        if (agent != null) feet -= Vector3.up * ZombieNavigationClearance.FootOffset(agent);
         SpecialZombie special = zombie.gameObject.AddComponent<SpecialZombie>();
         special._type = type;
         special._zombie = zombie;
         special.Setup();
+        // 러너/탱크의 크기가 바뀌어도 발 높이를 보존한다.
+        if (agent != null && agent.enabled && agent.isOnNavMesh)
+        {
+            agent.Warp(feet + Vector3.up * ZombieNavigationClearance.FootOffset(agent));
+        }
         return special;
     }
 
@@ -137,6 +145,8 @@ public class SpecialZombie : MonoBehaviour
 
         float dt = Time.deltaTime;
 
+        if (_zombie.State == ZombieState.Hit) return;
+
         // 능력을 쓰는 동안 잠깐 멈춘다.
         if (_pauseTimer > 0f)
         {
@@ -162,6 +172,13 @@ public class SpecialZombie : MonoBehaviour
                 UpdateTank(dt);
                 break;
         }
+    }
+
+    public void InterruptForShove(float stunTime)
+    {
+        if (_type == SpecialType.Tank) return;
+        _pauseTimer = 0f;
+        _abilityTimer = Mathf.Max(_abilityTimer, stunTime + 0.25f);
     }
 
     // ===================== 부머 =====================

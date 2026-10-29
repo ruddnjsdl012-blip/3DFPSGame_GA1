@@ -29,6 +29,7 @@ public class PlayerGunFire : MonoBehaviour
     private PlayerInventory _inventory;  // 보급품 (치료 중에는 쏠 수 없다)
     private PlayerGrenade _grenade;      // 수류탄을 들고 있으면 쏠 수 없다.
     private PlayerWeapons _weapons;      // 무기 바꾸기 (1 도끼 / 2 리볼버 / 3 AR = 이 총 / 4 수류탄)
+    private PlayerShove _shove;
 
     public ParticleSystem HitEffectPrefab => _hitEffectPrefab;  // 리볼버도 같은 총알 자국을 쓴다.
 
@@ -74,6 +75,9 @@ public class PlayerGunFire : MonoBehaviour
         {
             _weapons = gameObject.AddComponent<PlayerWeapons>();
         }
+
+        _shove = GetComponent<PlayerShove>();
+        if (_shove == null) _shove = gameObject.AddComponent<PlayerShove>();
     }
 
 
@@ -111,7 +115,8 @@ public class PlayerGunFire : MonoBehaviour
 
         // 1. 마우스 왼쪽 버튼 입력 받기
         bool isMouseVisible = Cursor.visible;
-        if (!isMouseVisible && Input.GetButton("Fire1") && _fireTimer <= 0f && _bulletCount > 0)
+        bool shoving = _shove != null && _shove.IsActive;
+        if (!isMouseVisible && !shoving && Input.GetButton("Fire1") && _fireTimer <= 0f && _bulletCount > 0)
         {
             _bulletCount--;
             OnAmmoChanged?.Invoke();
@@ -139,7 +144,7 @@ public class PlayerGunFire : MonoBehaviour
         }
 
         // 총알이 없는데 쏘려고 하면 '딸깍'
-        if (!isMouseVisible && Input.GetButtonDown("Fire1") && _bulletCount <= 0)
+        if (!isMouseVisible && !shoving && Input.GetButtonDown("Fire1") && _bulletCount <= 0)
         {
             GameSounds.Play2D("gun_empty", 0.8f);
 

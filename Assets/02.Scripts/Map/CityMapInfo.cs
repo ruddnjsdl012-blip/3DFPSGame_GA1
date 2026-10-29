@@ -2,6 +2,7 @@ using UnityEngine;
 
 // 도시 맵의 구역 정보. Tools > L4D 맵 > 도시 맵 만들기가 CityMap에 붙여 준다.
 // 다음 단계(AI 디렉터, 호드, 피날레)가 이 정보를 읽어서 쓴다.
+[DefaultExecutionOrder(-1000)]
 public class CityMapInfo : MonoBehaviour
 {
     [Header("출발")]
@@ -27,6 +28,15 @@ public class CityMapInfo : MonoBehaviour
     public Transform[] SpawnPoints => _spawnPoints;
     public BoxCollider FinaleArea => _finaleArea;
     public BoxCollider[] MidSafeRooms => _midSafeRooms;
+
+    private void Awake()
+    {
+        CityMapNavigation.Prepare(this);
+        if (GetComponent<CityMapAtmosphere>() == null)
+        {
+            gameObject.AddComponent<CityMapAtmosphere>();
+        }
+    }
 
     // 이 자리가 중간 안전가옥 안인가?
     public bool InMidSafeRoom(Vector3 position)

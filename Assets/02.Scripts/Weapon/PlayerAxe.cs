@@ -32,12 +32,14 @@ public class PlayerAxe : MonoBehaviour
     private bool _hitDone;
     private float _bobTime;
     private CharacterController _controller;
+    private PlayerShove _shove;
 
     private void Start()
     {
         _weapons = GetComponent<PlayerWeapons>();
         _inventory = GetComponent<PlayerInventory>();
         _controller = GetComponent<CharacterController>();
+        _shove = GetComponent<PlayerShove>();
         _view = WeaponArmView.Create(gameObject, WeaponModels.Create("Axe"));
     }
 
@@ -71,12 +73,18 @@ public class PlayerAxe : MonoBehaviour
             return;
         }
 
-        if (!Cursor.visible && Input.GetButton("Fire1") && _swingTimer < 0f)
+        if (!Cursor.visible && (_shove == null || !_shove.IsActive) && Input.GetButton("Fire1") && _swingTimer < 0f)
         {
             _swingTimer = 0f;
             _hitDone = false;
             GameSounds.Play2D("axe_swing", 0.8f, 0.1f);
         }
+    }
+
+    public void InterruptForShove()
+    {
+        _swingTimer = -1f;
+        _hitDone = true;
     }
 
     // ===================== 맞히기 =====================

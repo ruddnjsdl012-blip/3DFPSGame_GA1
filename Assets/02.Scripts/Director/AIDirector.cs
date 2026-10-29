@@ -420,23 +420,54 @@ public class AIDirector : MonoBehaviour
 
     private Zombie SpawnZombie(Vector3 position, bool hunt)
     {
-        Vector2 jitter = Random.insideUnitCircle * 2f;
-        Vector3 wanted = position + new Vector3(jitter.x, 0f, jitter.y);
-        if (!NavMesh.SamplePosition(wanted, out NavMeshHit hit, 4f, NavMesh.AllAreas))
+        NavMeshAgent prefabAgent = _zombiePrefab.GetComponent<NavMeshAgent>();
+        int agentType = prefabAgent != null ? prefabAgent.agentTypeID : 0;
+        int areaMask = prefabAgent != null ? prefabAgent.areaMask : NavMesh.AllAreas;
+        if (!ZombieNavigationTarget.TryGet(_player, agentType, areaMask, _zombiePrefab.gameObject.layer, out Vector3 target))
         {
             return null;
         }
 
-        Vector3 look = _player.position - hit.position;
+        if (_path == null)
+        {
+            _path = new NavMeshPath();
+        }
+
+        NavMeshQueryFilter filter = new NavMeshQueryFilter { agentTypeID = agentType, areaMask = areaMask };
+        Vector3 spawnPosition = position;
+        bool reachable = false;
+        for (int attempt = 0; attempt < 4; attempt++)
+        {
+            Vector2 jitter = attempt < 3 ? Random.insideUnitCircle * 2f : Vector2.zero;
+            Vector3 wanted = position + new Vector3(jitter.x, 0f, jitter.y);
+            if (NavMesh.SamplePosition(wanted, out NavMeshHit hit, 2f, filter)
+                && ZombieNavigationClearance.HasSpawnRoom(prefabAgent, hit.position)
+                && NavMesh.CalculatePath(hit.position, target, filter, _path)
+                && _path.status == NavMeshPathStatus.PathComplete)
+            {
+                spawnPosition = hit.position;
+                reachable = true;
+                break;
+            }
+        }
+
+        // 경로가 끊긴 작은 면/지붕 등에 생성된 좀비가 멈춰 서는 것을 막는다.
+        if (!reachable)
+        {
+            return null;
+        }
+
+        Vector3 look = _player.position - spawnPosition;
         look.y = 0f;
         Quaternion rotation = look.sqrMagnitude > 0.01f ? Quaternion.LookRotation(look) : Quaternion.identity;
-        Zombie zombie = Instantiate(_zombiePrefab, hit.position + Vector3.up, rotation);
+        Zombie zombie = Instantiate(_zombiePrefab, spawnPosition + Vector3.up, rotation);
+        zombie.SetTarget(_player);
 
         // NavMesh 위에 정확히 올려 두고, 끼면 빼 주는 도우미를 붙인다.
         NavMeshAgent agent = zombie.GetComponent<NavMeshAgent>();
         if (agent != null)
         {
-            agent.Warp(hit.position);
+            agent.Warp(spawnPosition + Vector3.up * ZombieNavigationClearance.FootOffset(agent));
         }
 
         if (zombie.GetComponent<ZombieUnstuck>() == null)

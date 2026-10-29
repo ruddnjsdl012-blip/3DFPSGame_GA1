@@ -41,6 +41,7 @@ public class GrenadeArmView : MonoBehaviour
     private Transform _grenadeVisual;
     private bool _built;
     private bool _visible;
+    private PlayerShove _shove;
 
     private Animator _bodyAnimator;  // 그림자를 만드는 3인칭 몸
 
@@ -54,6 +55,7 @@ public class GrenadeArmView : MonoBehaviour
     private void Start()
     {
         _body = GetComponent<FirstPersonBodyView>();
+        _shove = GetComponent<PlayerShove>();
         Camera camera = Camera.main;
         _camera = camera != null ? camera.transform : null;
         _bodyAnimator = GetComponentInChildren<Animator>();
@@ -105,6 +107,7 @@ public class GrenadeArmView : MonoBehaviour
         Vector3 local = Vector3.Lerp(_holdTarget, _windUpTarget, Mathf.SmoothStep(0f, 1f, _grenade.WindUp));
         local = Vector3.Lerp(local, _throwTarget, _grenade.Swing);
         local += new Vector3(0.05f, -0.35f, -0.05f) * rise;
+        local += new Vector3(-0.12f, 0.06f, 0.25f) * (_shove != null ? _shove.ViewAmount : 0f);
         Vector3 target = _camera.TransformPoint(local);
         Vector3 hint = _camera.TransformPoint(_elbowHint);
 

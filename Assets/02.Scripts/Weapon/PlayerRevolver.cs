@@ -35,6 +35,7 @@ public class PlayerRevolver : MonoBehaviour
     private float _kick;
     private float _reloadBlend;
     private bool _shotToggle;
+    private PlayerShove _shove;
 
     public int Rounds => _rounds;
     public int ClipSize => _clipSize;
@@ -51,6 +52,7 @@ public class PlayerRevolver : MonoBehaviour
         _inventory = GetComponent<PlayerInventory>();
         _feedback = GetComponent<GunFeedback>();
         _rifle = GetComponent<PlayerGunFire>();
+        _shove = GetComponent<PlayerShove>();
 
         Transform item = WeaponModels.Create("Revolver");
         _muzzle = WeaponModels.Find(item, "Muzzle");
@@ -93,7 +95,7 @@ public class PlayerRevolver : MonoBehaviour
 
         _fireTimer -= dt;
         bool mouseFree = Cursor.visible;
-        if (!mouseFree && Input.GetButtonDown("Fire1") && _reload == null)
+        if (!mouseFree && (_shove == null || !_shove.IsActive) && Input.GetButtonDown("Fire1") && _reload == null)
         {
             if (_rounds > 0 && _fireTimer <= 0f)
             {

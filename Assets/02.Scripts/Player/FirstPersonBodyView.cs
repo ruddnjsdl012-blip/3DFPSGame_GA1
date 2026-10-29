@@ -44,6 +44,7 @@ public class FirstPersonBodyView : MonoBehaviour
     private float _kickRoll;
     private PlayerInventory _inventory;
     private PlayerGrenade _grenade;
+    private PlayerShove _shove;
     private bool _hiddenForGrenade;
     private PlayerWeapons _weapons;
     private float _rifleBlend = 1f;
@@ -99,6 +100,7 @@ public class FirstPersonBodyView : MonoBehaviour
 
         _camera = camera.transform;
         _inventory = GetComponent<PlayerInventory>();
+        _shove = GetComponent<PlayerShove>();
 
         // 1인칭 모델을 놓을 자리: 몸에서 Model과 눈(CameraPosition)의 차이 만큼
         Transform eye = transform.Find("CameraPosition");
@@ -198,8 +200,12 @@ public class FirstPersonBodyView : MonoBehaviour
         {
             if (reload > 0.01f)
             {
-                Vector3 hand = _camera.InverseTransformPoint(_viewHand.position);
-                _handFollow += (_reloadHandTarget - hand) * Mathf.Clamp01(_handFollowSpeed * Time.deltaTime) * reload;
+                // 밀치기의 앞으로 뻗는 동작을 재장전 위치 보정이 되돌리지 않게 한다.
+                if (_shove == null || !_shove.IsActive)
+                {
+                    Vector3 hand = _camera.InverseTransformPoint(_viewHand.position);
+                    _handFollow += (_reloadHandTarget - hand) * Mathf.Clamp01(_handFollowSpeed * Time.deltaTime) * reload;
+                }
             }
             else
             {
@@ -244,8 +250,10 @@ public class FirstPersonBodyView : MonoBehaviour
         Vector3 kickOffset = new Vector3(0f, _kickUp, -_kickBack) * _kick;
         Vector3 kickTilt = new Vector3(-_kickPitch * _kick, 0f, _kickRoll * 2f * _kick);
 
-        _view.localPosition = _baseOffset + _viewOffset + _reloadOffset * reload + _handFollow + bob + _healOffset * heal + kickOffset;
-        _view.localRotation = Quaternion.Euler(_reloadTilt * reload + _healTilt * heal + kickTilt);
+        float shove = _shove != null ? _shove.ViewAmount : 0f;
+        _view.localPosition = _baseOffset + _viewOffset + _reloadOffset * reload + _handFollow + bob + _healOffset * heal + kickOffset
+            + new Vector3(-0.075f, 0.045f, 0.2f) * shove;
+        _view.localRotation = Quaternion.Euler(_reloadTilt * reload + _healTilt * heal + kickTilt + new Vector3(-8f, -12f, -8f) * shove);
 
         Calibrate();
 
