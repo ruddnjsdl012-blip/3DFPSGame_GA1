@@ -10,8 +10,10 @@ using UnityEngine;
 // Mixamo에서 받은 동작은 Root Transform Position (Y)가 'Center of Mass(무게중심)' 기준이라
 // 몸을 숙이는 동작(맞기, 공격)에서 몸 전체가 아래로 내려가 발이 땅에 묻힌다.
 // 좀비 애니메이터 컨트롤러에 들어 있는 모든 동작을
-//   Root Transform Position (Y): Bake Into Pose 켬 + Based Upon: Original
-// 로 바꾼다. (16.6.1에서 플레이어 동작에 한 것과 같은 설정. 앞뒤 이동(XZ)은 건드리지 않는다)
+//   Root Transform Position (Y): Bake Into Pose 켬 + Based Upon: Feet (발 기준 → 발이 늘 바닥에 붙는다)
+// 로 바꾼다. 앞뒤 이동(XZ)은 건드리지 않는다.
+//  - FBX 안의 동작: FBX의 Animation 탭 설정을 바꾼다.
+//  - FBX에서 복사해 낸 .anim 동작(Ctrl+D): 그 동작 파일의 설정을 바꾼다. (예전 버전은 이걸 못 고쳤다)
 [InitializeOnLoad]
 public static class ZombieAnimationFix
 {
@@ -27,7 +29,7 @@ public static class ZombieAnimationFix
             return;
         }
 
-        string key = "ZombieAnimationFix.Asked." + Application.dataPath;
+        string key = "ZombieAnimationFix.Asked.v2." + Application.dataPath;
         if (EditorPrefs.GetBool(key, false))
         {
             return;
@@ -76,13 +78,26 @@ public static class ZombieAnimationFix
 
         // 2. 컨트롤러 안의 동작들이 들어 있는 모델 파일(FBX)을 모은다.
         Dictionary<string, HashSet<string>> clipsByModel = new Dictionary<string, HashSet<string>>();
+        List<string> log = new List<string>();
+        HashSet<AnimationClip> seen = new HashSet<AnimationClip>();
         foreach (AnimatorController controller in controllers)
         {
             foreach (AnimationClip clip in controller.animationClips)
             {
+                if (clip == null || !seen.Add(clip))
+                {
+                    continue;
+                }
+
                 string path = AssetDatabase.GetAssetPath(clip);
                 if (!(AssetImporter.GetAtPath(path) is ModelImporter))
                 {
+                    // 따로 떨어진 .anim 파일
+                    if (FixAnimFile(clip))
+                    {
+                        log.Add("✔ " + System.IO.Path.GetFileName(path) + " (.anim)");
+                    }
+
                     continue;
                 }
 
@@ -96,8 +111,7 @@ public static class ZombieAnimationFix
             }
         }
 
-        // 3. Root Y: Bake Into Pose + Original
-        List<string> log = new List<string>();
+        // 3. Root Y: Bake Into Pose + Feet
         foreach (KeyValuePair<string, HashSet<string>> pair in clipsByModel)
         {
             ModelImporter importer = (ModelImporter)AssetImporter.GetAtPath(pair.Key);
@@ -115,14 +129,14 @@ public static class ZombieAnimationFix
                     continue;
                 }
 
-                if (clip.lockRootHeightY && clip.keepOriginalPositionY)
+                if (clip.lockRootHeightY && clip.heightFromFeet)
                 {
                     continue;
                 }
 
-                clip.lockRootHeightY = true;        // Bake Into Pose
-                clip.keepOriginalPositionY = true;  // Based Upon: Original
-                clip.heightFromFeet = false;
+                clip.lockRootHeightY = true;         // Bake Into Pose
+                clip.keepOriginalPositionY = false;
+                clip.heightFromFeet = true;          // Based Upon: Feet
                 changed++;
             }
 
@@ -135,9 +149,32 @@ public static class ZombieAnimationFix
         }
 
         string body = log.Count > 0
-            ? "좀비 동작의 Root Y를 Bake Into Pose + Original로 바꿨습니다.\n\n" + string.Join("\n", log)
-            : "좀비 동작이 이미 올바르게 설정되어 있습니다. (" + clipsByModel.Count + "개 파일 확인)";
+            ? "좀비 동작의 Root Y를 Bake Into Pose + Feet으로 바꿨습니다.\n\n" + string.Join("\n", log)
+            : "좀비 동작이 이미 올바르게 설정되어 있습니다. (" + seen.Count + "개 동작 확인)";
         Debug.Log("[좀비 땅 묻힘] " + body);
         EditorUtility.DisplayDialog("좀비 땅 묻힘", body, "확인");
+    }
+
+    // .anim 파일: AnimationClipSettings로 같은 설정을 넣는다.
+    private static bool FixAnimFile(AnimationClip clip)
+    {
+        if ((clip.hideFlags & HideFlags.NotEditable) != 0)
+        {
+            return false;  // 읽기 전용 (패키지 안의 동작 등)
+        }
+
+        AnimationClipSettings settings = AnimationUtility.GetAnimationClipSettings(clip);
+        if (settings.loopBlendPositionY && settings.heightFromFeet)
+        {
+            return false;
+        }
+
+        settings.loopBlendPositionY = true;      // Bake Into Pose
+        settings.keepOriginalPositionY = false;
+        settings.heightFromFeet = true;          // Based Upon: Feet
+        AnimationUtility.SetAnimationClipSettings(clip, settings);
+        EditorUtility.SetDirty(clip);
+        AssetDatabase.SaveAssets();
+        return true;
     }
 }

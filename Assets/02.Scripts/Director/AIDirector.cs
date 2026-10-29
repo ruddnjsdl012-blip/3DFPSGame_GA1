@@ -32,6 +32,10 @@ public class AIDirector : MonoBehaviour
     [SerializeField] private Zombie _zombiePrefab;
     [SerializeField] private CityMapInfo _map;
 
+    [Header("좀비 양 (배율) - 크면 더 많이, 더 자주. 맵이 커져서 기본 2.5배")]
+    [SerializeField, Range(0.5f, 5f)] private float _population = 2.5f;
+    [SerializeField] private int _aliveLimit = 90;             // 아무리 많아도 동시에 이 이상은 만들지 않는다. (성능)
+
     [Header("평소 (빌드업)")]
     [SerializeField] private int _wanderers = 6;               // 길가에 미리 서 있는 좀비 수
     [SerializeField] private float _spawnInterval = 2.5f;      // 좀비가 하나씩 나오는 간격 (초)
@@ -194,13 +198,13 @@ public class AIDirector : MonoBehaviour
                 break;
 
             case Phase.BuildUp:
-                SpawnCommons(dt, _spawnInterval);
+                SpawnCommons(dt, CommonInterval);
                 UpdateSpecials(dt, false);
                 CheckRouteTank();
                 _hordeTimer -= dt;
                 if (_hordeTimer <= 0f)
                 {
-                    StartHorde(_hordeSize, "호드가 몰려온다!");
+                    StartHorde(HordeSize, "호드가 몰려온다!");
                     _hordeTimer = Random.Range(_hordeInterval.x, _hordeInterval.y);
                 }
 
@@ -223,7 +227,7 @@ public class AIDirector : MonoBehaviour
 
             case Phase.Relax:
                 // 휴식: 아주 가끔만 나온다.
-                SpawnCommons(dt, _spawnInterval * 4f);
+                SpawnCommons(dt, CommonInterval * 4f);
                 UpdateSpecials(dt * 0.5f, false);
                 _phaseTimer -= dt;
                 if (_phaseTimer <= 0f)
@@ -325,7 +329,7 @@ public class AIDirector : MonoBehaviour
 
         // 출발점과 피날레는 빼고 경로 가운데에 흩어 놓는다. (가까이 가야 쫓아오는 좀비)
         // 맵이 길수록 더 많이 (예전 맵 경로 약 220m 기준)
-        int count = Mathf.RoundToInt(_wanderers * Mathf.Max(1f, _map.RouteLength / 220f));
+        int count = Mathf.Min(30, Mathf.RoundToInt(_wanderers * Mathf.Max(1f, _map.RouteLength / 220f) * _population));
         for (int i = 0; i < count; i++)
         {
             Transform point = route[Random.Range(2, route.Length - 1)];
@@ -333,6 +337,15 @@ public class AIDirector : MonoBehaviour
             SpawnZombie(point.position + new Vector3(offset.x, 0f, offset.y), false);
         }
     }
+
+    // 배율을 곱한 실제 값
+    private int MaxCommons => Mathf.RoundToInt(_maxCommons * _population);
+    private int MaxAlive => Mathf.Min(_aliveLimit, Mathf.RoundToInt(_maxAlive * _population));
+    private int FinaleMaxAlive => Mathf.Min(_aliveLimit, Mathf.RoundToInt(_finaleMaxAlive * _population));
+    private int HordeSize => Mathf.RoundToInt(_hordeSize * _population);
+    private int SwarmSize => Mathf.RoundToInt(_swarmSize * _population);
+    private float CommonInterval => _spawnInterval / Mathf.Max(0.1f, _population);
+    private float FinaleInterval => _finaleSpawnInterval / Mathf.Max(0.1f, _population);
 
     private void SpawnCommons(float dt, float interval)
     {
@@ -343,28 +356,31 @@ public class AIDirector : MonoBehaviour
         }
 
         _spawnTimer = interval * Random.Range(0.7f, 1.3f);
-        if (CountHunters() >= _maxCommons || _alive.Count >= _maxAlive)
+        if (CountHunters() >= MaxCommons || _alive.Count >= MaxAlive)
         {
             return;
         }
 
-        Transform point = PickSpawnPoint(false);
-        if (point != null)
+        // 한 번에 1~3마리씩 무리 지어 나온다.
+        if (PickSpawnPosition(false, out Vector3 spawn))
         {
-            SpawnZombie(point.position, true);
+            int group = Random.Range(1, 2 + Mathf.CeilToInt(_population * 0.6f));
+            for (int i = 0; i < group && _alive.Count < MaxAlive; i++)
+            {
+                SpawnZombie(spawn, true);
+            }
         }
     }
 
     // 호드: 한 자리(보이지 않는 곳)에서 좀비가 짧은 간격으로 쏟아져 나온다.
     private void StartHorde(int size, string message)
     {
-        Transform point = PickSpawnPoint(false);
-        if (point == null)
+        if (!PickSpawnPosition(false, out Vector3 spawn))
         {
             return;
         }
 
-        _hordeOrigin = point.position;
+        _hordeOrigin = spawn;
         _hordeQueue += size;
         _hordeQueueTimer = 0f;
         _hud.ShowAlert(message, new Color(1f, 0.2f, 0.15f), 3f);
@@ -378,14 +394,14 @@ public class AIDirector : MonoBehaviour
             return;
         }
 
-        int maxAlive = _phase == Phase.Finale || _phase == Phase.Escape ? _finaleMaxAlive : _maxAlive;
+        int maxAlive = _phase == Phase.Finale || _phase == Phase.Escape ? FinaleMaxAlive : MaxAlive;
         _hordeQueueTimer -= dt;
         if (_hordeQueueTimer > 0f || _alive.Count >= maxAlive)
         {
             return;
         }
 
-        _hordeQueueTimer = 0.15f;
+        _hordeQueueTimer = 0.15f / Mathf.Max(1f, _population * 0.6f);
         SpawnZombie(_hordeOrigin, true);
         _hordeQueue--;
     }
@@ -477,8 +493,7 @@ public class AIDirector : MonoBehaviour
 
     private bool SpawnSpecial(SpecialType type, bool finale)
     {
-        Transform point = PickSpawnPoint(finale);
-        if (point == null)
+        if (!PickSpawnPosition(finale, out Vector3 spawn))
         {
             return false;
         }
@@ -487,7 +502,7 @@ public class AIDirector : MonoBehaviour
         bool spawned = false;
         for (int i = 0; i < count; i++)
         {
-            Zombie zombie = SpawnZombie(point.position, true);
+            Zombie zombie = SpawnZombie(spawn, true);
             if (zombie == null)
             {
                 continue;
@@ -544,6 +559,77 @@ public class AIDirector : MonoBehaviour
                 _hunters.Add(zombie);
             }
         }
+    }
+
+    // 좀비가 나올 자리: 정해 둔 스폰 포인트 + 플레이어 주변의 보이지 않는 아무 길 (World War Z처럼 사방에서)
+    private NavMeshPath _path;  // (필드에서 바로 new 하면 안 된다 - 처음 쓸 때 만든다)
+
+    private bool PickSpawnPosition(bool finale, out Vector3 position)
+    {
+        // 60%는 주변의 아무 길에서 (스폰 포인트가 멀리 있어도 좀비가 끊기지 않게)
+        if (Random.value < 0.6f && TryRandomPosition(finale, out position))
+        {
+            return true;
+        }
+
+        Transform point = PickSpawnPoint(finale);
+        if (point != null)
+        {
+            position = point.position;
+            return true;
+        }
+
+        return TryRandomPosition(finale, out position);
+    }
+
+    private bool TryRandomPosition(bool finale, out Vector3 position)
+    {
+        position = Vector3.zero;
+        for (int attempt = 0; attempt < 6; attempt++)
+        {
+            Vector3 candidate;
+            if (finale && _map.FinaleArea != null)
+            {
+                Bounds area = _map.FinaleArea.bounds;
+                candidate = new Vector3(Random.Range(area.min.x, area.max.x), _player.position.y, Random.Range(area.min.z, area.max.z));
+                if (Vector3.Distance(Flat(candidate), Flat(_player.position)) < 12f)
+                {
+                    continue;
+                }
+            }
+            else
+            {
+                Vector2 dir = Random.insideUnitCircle.normalized;
+                float distance = Random.Range(_spawnMinDistance + 2f, Mathf.Min(_spawnMaxDistance, 45f));
+                candidate = _player.position + new Vector3(dir.x, 0f, dir.y) * distance;
+            }
+
+            if (!NavMesh.SamplePosition(candidate, out NavMeshHit hit, 3f, NavMesh.AllAreas))
+            {
+                continue;
+            }
+
+            // 같은 높이(지붕 위나 고가 아래가 아닌 곳)이고, 안 보이고, 플레이어까지 걸어올 수 있는 곳
+            if (Mathf.Abs(hit.position.y - _player.position.y) > 2.5f || IsVisible(hit.position))
+            {
+                continue;
+            }
+
+            if (_path == null)
+            {
+                _path = new NavMeshPath();
+            }
+
+            if (!NavMesh.CalculatePath(hit.position, _player.position, NavMesh.AllAreas, _path) || _path.status != NavMeshPathStatus.PathComplete)
+            {
+                continue;
+            }
+
+            position = hit.position;
+            return true;
+        }
+
+        return false;
     }
 
     // 평소: 플레이어에서 적당히 떨어져 있고 화면에 보이지 않는 스폰 포인트
@@ -707,13 +793,12 @@ public class AIDirector : MonoBehaviour
 
         // 쉬지 않고 광장 곳곳에서 나온다.
         _spawnTimer -= dt;
-        if (_spawnTimer <= 0f && _alive.Count < _finaleMaxAlive)
+        if (_spawnTimer <= 0f && _alive.Count < FinaleMaxAlive)
         {
-            _spawnTimer = _finaleSpawnInterval;
-            Transform point = PickSpawnPoint(true);
-            if (point != null)
+            _spawnTimer = FinaleInterval;
+            if (PickSpawnPosition(true, out Vector3 spawn))
             {
-                SpawnZombie(point.position, true);
+                SpawnZombie(spawn, true);
             }
         }
 
@@ -722,11 +807,10 @@ public class AIDirector : MonoBehaviour
         if (_swarmTimer <= 0f)
         {
             _swarmTimer = _swarmInterval;
-            Transform point = PickSpawnPoint(true);
-            if (point != null)
+            if (PickSpawnPosition(true, out Vector3 swarm))
             {
-                _hordeOrigin = point.position;
-                _hordeQueue += _swarmSize;
+                _hordeOrigin = swarm;
+                _hordeQueue += SwarmSize;
                 _hud.ShowAlert("대규모 무리가 밀려온다!", new Color(1f, 0.15f, 0.1f), 3f);
                 _audio.PlayOneShot(_hornClip, 1f);
             }
@@ -747,13 +831,12 @@ public class AIDirector : MonoBehaviour
     {
         // 탈출하는 동안에도 계속 몰려온다.
         _spawnTimer -= dt;
-        if (_spawnTimer <= 0f && _alive.Count < _finaleMaxAlive)
+        if (_spawnTimer <= 0f && _alive.Count < FinaleMaxAlive)
         {
-            _spawnTimer = _finaleSpawnInterval;
-            Transform point = PickSpawnPoint(true);
-            if (point != null)
+            _spawnTimer = FinaleInterval;
+            if (PickSpawnPosition(true, out Vector3 spawn))
             {
-                SpawnZombie(point.position, true);
+                SpawnZombie(spawn, true);
             }
         }
 

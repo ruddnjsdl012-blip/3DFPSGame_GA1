@@ -77,6 +77,7 @@ public class GunFeedback : MonoBehaviour
     private SpriteRenderer[] _flashSprites;
     private Light _flashLight;
     private float _flashTimer;
+    private Transform _muzzleOverride;  // 이번 발의 총구 (리볼버)
 
     private void Start()
     {
@@ -134,8 +135,16 @@ public class GunFeedback : MonoBehaviour
         }
     }
 
+    // AR 한 발 (PlayerGunFire)
     public void OnShot()
     {
+        OnShot(1f, "gun_shot", _shotVolume, null);
+    }
+
+    // 다른 총 (리볼버 등): kickScale = 반동 배율, muzzle = 총구 위치 (null이면 AR 총구)
+    public void OnShot(float kickScale, string sound, float volume, Transform muzzle)
+    {
+        _muzzleOverride = muzzle;
         // 연사: 쉬지 않고 쏠수록 반동이 커지고, 한쪽으로 조금씩 쏠린다.
         if (Time.time - _lastShotTime > 0.3f)
         {
@@ -150,7 +159,7 @@ public class GunFeedback : MonoBehaviour
         _drift = Mathf.Clamp(_drift + Random.Range(-0.35f, 0.35f), -1f, 1f);
 
         // 1. 반동: 위로 튀고 좌우로 (조준점이 실제로 움직인다)
-        float up = Random.Range(_verticalKick.x, _verticalKick.y) * burst;
+        float up = Random.Range(_verticalKick.x, _verticalKick.y) * burst * kickScale;
         float side = (Random.Range(-_horizontalKick, _horizontalKick) + _drift * _horizontalKick * 0.6f * (burst - 1f) * 2f);
         _pendingPitch -= up;  // 음수 = 위로
         _pendingYaw += side;
@@ -159,21 +168,21 @@ public class GunFeedback : MonoBehaviour
         // 2. 카메라 흔들림 + 화면 튐 + 시야 넓어짐 (보이는 화면만)
         if (_shake != null)
         {
-            _shake.Shake(_shakePerShot);
-            _shake.Punch(new Vector3(-_punchPerShot * Random.Range(0.8f, 1.2f), side * 1.5f, Random.Range(-_rollPerShot, _rollPerShot)), _fovPerShot);
+            _shake.Shake(_shakePerShot * Mathf.Sqrt(kickScale));
+            _shake.Punch(new Vector3(-_punchPerShot * kickScale * Random.Range(0.8f, 1.2f), side * 1.5f, Random.Range(-_rollPerShot, _rollPerShot)), _fovPerShot * kickScale);
         }
 
         // 3. 총구 화염
         ShowFlash();
 
-        // 1인칭 모델의 쏘는 동작
-        if (_bodyView != null)
+        // 1인칭 모델의 쏘는 동작 (AR일 때만)
+        if (_bodyView != null && muzzle == null)
         {
             _bodyView.OnShot();
         }
 
         // 4. 총소리
-        GameSounds.Play2D("gun_shot", _shotVolume, 0.06f);
+        GameSounds.Play2D(sound, volume, 0.06f);
     }
 
     private void Update()
@@ -303,6 +312,12 @@ public class GunFeedback : MonoBehaviour
     private Vector3 MuzzlePosition()
     {
         Transform cam = _camera.transform;
+
+        // 리볼버 등 다른 총의 총구
+        if (_muzzleOverride != null && _muzzleOverride.gameObject.activeInHierarchy)
+        {
+            return _muzzleOverride.position + cam.forward * 0.02f;
+        }
 
         // 1인칭 모델(카메라에 붙은 군인) 총의 진짜 총구 (총 메시에서 자동으로 찾은 점)
         if (_bodyView != null && _bodyView.TryGetMuzzle(out Vector3 muzzle))

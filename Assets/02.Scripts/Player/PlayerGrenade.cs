@@ -83,15 +83,11 @@ public class PlayerGrenade : MonoBehaviour
         switch (_state)
         {
             case State.Gun:
-                if (Input.GetKeyDown(KeyCode.Alpha4) && !healing)
-                {
-                    TryEquip();
-                }
-
+                // 4번 키는 PlayerWeapons가 받아서 Equip()을 부른다.
                 break;
 
             case State.Holding:
-                if (Input.GetKeyDown(KeyCode.Alpha1) || Input.GetButtonDown("Fire2") || healing)
+                if (Input.GetButtonDown("Fire2") || healing)
                 {
                     Unequip();
                 }
@@ -106,7 +102,7 @@ public class PlayerGrenade : MonoBehaviour
 
             case State.Charging:
                 _charge = Mathf.Clamp01(_charge + dt / _chargeTime);
-                if (Input.GetButtonDown("Fire2") || Input.GetKeyDown(KeyCode.Alpha1))
+                if (Input.GetButtonDown("Fire2"))
                 {
                     _state = State.Holding;  // 취소: 다시 들고 있는 자세로
                     _charge = 0f;
@@ -151,7 +147,19 @@ public class PlayerGrenade : MonoBehaviour
         GameSounds.Play2D("pickup_bomb", 0.5f);
     }
 
-    private void Unequip()
+    // PlayerWeapons가 4번을 누르면 부른다. 수류탄이 없으면 false
+    public bool Equip()
+    {
+        if (_state != State.Gun)
+        {
+            return true;
+        }
+
+        TryEquip();
+        return _state != State.Gun;
+    }
+
+    public void Unequip()
     {
         _state = State.Gun;
         _charge = 0f;

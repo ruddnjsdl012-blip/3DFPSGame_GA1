@@ -356,6 +356,12 @@ public class GrenadeArmView : MonoBehaviour
         int kept = 0;
         for (int sub = 0; sub < source.subMeshCount; sub++)
         {
+            if (IsWeaponMaterial(skinned, sub))
+            {
+                trimmed.SetTriangles(new List<int>(), sub);
+                continue;
+            }
+
             int[] triangles = source.GetTriangles(sub);
             List<int> result = new List<int>(triangles.Length);
             for (int t = 0; t + 2 < triangles.Length; t += 3)
@@ -374,6 +380,19 @@ public class GrenadeArmView : MonoBehaviour
 
         skinned.sharedMesh = trimmed;
         return kept > 0;
+    }
+
+    // 군인 모델에 같이 들어 있는 총(재질 이름에 weapon/gun/rifle)은 통째로 뺀다.
+    private static bool IsWeaponMaterial(SkinnedMeshRenderer skinned, int sub)
+    {
+        Material[] materials = skinned.sharedMaterials;
+        if (sub >= materials.Length || materials[sub] == null)
+        {
+            return false;
+        }
+
+        string name = materials[sub].name.ToLowerInvariant();
+        return name.Contains("weapon") || name.Contains("gun") || name.Contains("rifle");
     }
 
     private static float DistanceToSegment(Vector3 p, Vector3 a, Vector3 b)

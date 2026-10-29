@@ -45,6 +45,8 @@ public class FirstPersonBodyView : MonoBehaviour
     private PlayerInventory _inventory;
     private PlayerGrenade _grenade;
     private bool _hiddenForGrenade;
+    private PlayerWeapons _weapons;
+    private float _rifleBlend = 1f;
     private float _healBlend;
     private Animator _bodyAnimator;
     private Animator _viewAnimator;
@@ -217,6 +219,18 @@ public class FirstPersonBodyView : MonoBehaviour
         }
 
         float grenade = _grenade != null ? Mathf.SmoothStep(0f, 1f, _grenade.EquipBlend) : 0f;
+
+        // AR(3번)이 아닌 무기를 들면 AR도 내렸다가 숨긴다. (도끼, 리볼버는 WeaponArmView가 보여 준다)
+        if (_weapons == null)
+        {
+            _weapons = GetComponent<PlayerWeapons>();
+        }
+
+        if (_weapons != null)
+        {
+            _rifleBlend = Mathf.MoveTowards(_rifleBlend, _weapons.Raise(WeaponSlot.Rifle), Time.deltaTime * 6f);
+            grenade = Mathf.Max(grenade, 1f - Mathf.SmoothStep(0f, 1f, _rifleBlend));
+        }
         heal = Mathf.Max(heal, grenade * 1.5f);  // 치료 자세보다 더 많이 내린다.
         bool hideGun = grenade > 0.35f;
         if (hideGun != _hiddenForGrenade && _calibrateFrames <= 0)

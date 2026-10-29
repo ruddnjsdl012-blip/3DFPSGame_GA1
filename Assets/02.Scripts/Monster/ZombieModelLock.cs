@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using UnityEngine;
 
 // 좀비가 맞을 때(Hit 동작) 땅에 파묻히는 것을 막는다. Zombie가 Start에서 붙인다.
@@ -13,7 +14,7 @@ using UnityEngine;
 [DefaultExecutionOrder(900)]
 public class ZombieModelLock : MonoBehaviour
 {
-    private const float MinBoneHeight = 0.05f;  // 발목 뼈는 발바닥보다 조금 위에 있다.
+    private float _minBoneHeight = 0.05f;  // 발목 뼈는 발바닥보다 조금 위에 있다. (Generic이면 발끝 뼈까지 보므로 거의 0)
 
     private static readonly HumanBodyBones[] LowBones =
     {
@@ -28,6 +29,13 @@ public class ZombieModelLock : MonoBehaviour
     private float _lift;
     private float _ground;
     private float _groundTimer;
+    private static bool _reported;
+
+    [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+    private static void ResetStatics()
+    {
+        _reported = false;
+    }
 
     private void Start()
     {
@@ -42,13 +50,39 @@ public class ZombieModelLock : MonoBehaviour
         _model = _animator.transform;
         _baseLocalPosition = _model.localPosition;
 
+        // 뼈 모으기: Humanoid면 발/엉덩이/머리/손, Generic이면 메시에 붙은 모든 뼈
+        List<Transform> bones = new List<Transform>();
         if (_animator.isHuman)
         {
-            _bones = new Transform[LowBones.Length];
-            for (int i = 0; i < LowBones.Length; i++)
+            foreach (HumanBodyBones bone in LowBones)
             {
-                _bones[i] = _animator.GetBoneTransform(LowBones[i]);
+                Transform t = _animator.GetBoneTransform(bone);
+                if (t != null)
+                {
+                    bones.Add(t);
+                }
             }
+        }
+
+        if (bones.Count == 0)
+        {
+            _minBoneHeight = 0.01f;
+            foreach (SkinnedMeshRenderer skinned in _model.GetComponentsInChildren<SkinnedMeshRenderer>(true))
+            {
+                foreach (Transform t in skinned.bones)
+                {
+                    if (t != null && !bones.Contains(t))
+                    {
+                        bones.Add(t);
+                    }
+                }
+            }
+        }
+
+        _bones = bones.Count > 0 ? bones.ToArray() : null;
+        if (_bones == null)
+        {
+            Debug.LogWarning("[ZombieModelLock] " + name + ": 모델의 뼈를 찾지 못해 땅 묻힘 보정을 할 수 없습니다.");
         }
     }
 
@@ -86,13 +120,28 @@ public class ZombieModelLock : MonoBehaviour
 
         float ground = _ground;
         float scale = transform.lossyScale.y;
-        float need = Mathf.Max(0f, ground + MinBoneHeight * scale - lowest);
+        float need = Mathf.Max(0f, ground + _minBoneHeight * scale - lowest);
 
         // 갑자기 튀지 않게 부드럽게 (올릴 때는 빠르게, 내릴 때는 천천히)
         _lift = need > _lift ? Mathf.Lerp(_lift, need, 1f - Mathf.Exp(-30f * Time.deltaTime)) : Mathf.MoveTowards(_lift, need, Time.deltaTime * 1.5f);
         if (_lift > 0.001f)
         {
             _model.position += Vector3.up * _lift;
+        }
+
+        // 많이 내려간 동작이 있으면 어떤 동작인지 한 번 알려 준다. (원인 찾기용)
+        if (need > 0.12f * scale && !_reported)
+        {
+            _reported = true;
+            string clip = "?";
+            AnimatorClipInfo[] infos = _animator.GetCurrentAnimatorClipInfo(0);
+            if (infos.Length > 0 && infos[0].clip != null)
+            {
+                clip = infos[0].clip.name;
+            }
+
+            Debug.Log("[ZombieModelLock] '" + clip + "' 동작에서 좀비 몸이 바닥 아래로 " + need.ToString("0.00") + "m 내려가서 올려 주었습니다. "
+                      + "Tools > L4D 맵 > 좀비 애니메이션 땅 묻힘 고치기를 누르면 동작 자체가 고쳐집니다.");
         }
     }
 

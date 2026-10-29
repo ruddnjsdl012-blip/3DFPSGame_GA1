@@ -73,10 +73,34 @@ public class UI_AmmoHud : MonoBehaviour
         }
     }
 
+    private PlayerWeapons _weapons;
+
     private void Refresh()
     {
         if (_gun == null)
         {
+            return;
+        }
+
+        // AR이 아닌 무기(도끼, 리볼버, 수류탄)를 들고 있으면 그 무기의 표시
+        if (_weapons == null)
+        {
+            _weapons = _gun.GetComponent<PlayerWeapons>();
+        }
+
+        if (_weapons != null && _weapons.GetAmmoDisplay(out string big, out string small, out string hint, out Color color))
+        {
+            if (_bullet.text != big)
+            {
+                _punch = 1f;
+            }
+
+            _bullet.text = big;
+            _bullet.color = color;
+            _reserve.text = small;
+            _reserve.color = new Color(0.8f, 0.8f, 0.8f);
+            _hint.text = hint;
+            _hint.color = new Color(0.8f, 0.9f, 1f);
             return;
         }
 
@@ -129,6 +153,9 @@ public class UI_AmmoHud : MonoBehaviour
 
     private void Update()
     {
+        // 무기를 바꾸거나 리볼버를 쏠 때 바로 보이도록 (값이 바뀔 때만 글자가 다시 그려진다)
+        Refresh();
+
         // 한 발 쏠 때마다 숫자가 살짝 커졌다 돌아온다.
         if (_punch > 0f)
         {

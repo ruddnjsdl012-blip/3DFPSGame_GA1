@@ -27,7 +27,10 @@ public class PlayerGunFire : MonoBehaviour
     private GunFeedback _feedback;  // 반동, 카메라 흔들림, 총구 화염, 총소리
     private int _reserveAmmo = 0;
     private PlayerInventory _inventory;  // 보급품 (치료 중에는 쏠 수 없다)
-    private PlayerGrenade _grenade;      // 수류탄을 들고 있으면 쏠 수 없다. (4번 수류탄, 1번 총)
+    private PlayerGrenade _grenade;      // 수류탄을 들고 있으면 쏠 수 없다.
+    private PlayerWeapons _weapons;      // 무기 바꾸기 (1 도끼 / 2 리볼버 / 3 AR = 이 총 / 4 수류탄)
+
+    public ParticleSystem HitEffectPrefab => _hitEffectPrefab;  // 리볼버도 같은 총알 자국을 쓴다.
 
     // 총알 수가 바뀔 때 알려준다. (옵저버 패턴: UI_AmmoHud가 구독)
     public event Action OnAmmoChanged;
@@ -64,6 +67,13 @@ public class PlayerGunFire : MonoBehaviour
         {
             _grenade = gameObject.AddComponent<PlayerGrenade>();
         }
+
+        // 무기 바꾸기 (도끼, 리볼버도 함께 붙는다)
+        _weapons = GetComponent<PlayerWeapons>();
+        if (_weapons == null)
+        {
+            _weapons = gameObject.AddComponent<PlayerWeapons>();
+        }
     }
 
 
@@ -92,6 +102,9 @@ public class PlayerGunFire : MonoBehaviour
 
         // 수류탄을 들고 있으면 총은 쓰지 않는다. (왼쪽 클릭은 수류탄 던지기)
         if (_grenade != null && _grenade.IsEquipped) return;
+
+        // 3번(AR)을 들고 있을 때만 (바꾸는 중에도 못 쏜다)
+        if (_weapons != null && !_weapons.IsReady(WeaponSlot.Rifle)) return;
 
         // 0. 발사 타이머를 지난 시간만큼 줄인다.
         _fireTimer -= Time.deltaTime;
@@ -143,6 +156,17 @@ public class PlayerGunFire : MonoBehaviour
         {
             _reloadCoroutine = StartCoroutine(Reloading_Coroutine());
         }
+    }
+
+    // 다른 무기로 바꾸면 재장전을 멈춘다. (PlayerWeapons가 부른다)
+    public void CancelReload()
+    {
+        if (_reloadCoroutine == null) return;
+
+        StopCoroutine(_reloadCoroutine);
+        _reloadCoroutine = null;
+        _animator.SetBool("IsReloading", false);
+        OnAmmoChanged?.Invoke();
     }
 
     private IEnumerator Reloading_Coroutine()
