@@ -12,6 +12,9 @@ public static class GameSounds
     private static readonly Dictionary<string, AudioClip[]> Cache = new Dictionary<string, AudioClip[]>();
     private static readonly Dictionary<string, float> LastPlayed = new Dictionary<string, float>();
     private static AudioSource _source2D;
+    private const int MaxSpatialVoices = 24;
+    private static readonly List<AudioSource> SpatialSources = new List<AudioSource>(MaxSpatialVoices);
+    private static Transform _root;
 
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
     private static void ResetStatics()
@@ -19,6 +22,8 @@ public static class GameSounds
         Cache.Clear();
         LastPlayed.Clear();
         _source2D = null;
+        _root = null;
+        SpatialSources.Clear();
     }
 
     // 이름에 해당하는 소리 중 하나 (없으면 null)
@@ -61,7 +66,7 @@ public static class GameSounds
         if (_source2D == null)
         {
             GameObject go = new GameObject("GameSounds2D");
-            Object.DontDestroyOnLoad(go);
+            go.transform.SetParent(GetRoot(), false);
             _source2D = go.AddComponent<AudioSource>();
             _source2D.playOnAwake = false;
             _source2D.spatialBlend = 0f;
@@ -85,10 +90,14 @@ public static class GameSounds
             return;
         }
 
+        AudioSource source = GetSpatialSource();
+        if (source == null)
+        {
+            return;
+        }
+
         LastPlayed[name] = Time.time;
-        GameObject go = new GameObject("Sound_" + name);
-        go.transform.position = position;
-        AudioSource source = go.AddComponent<AudioSource>();
+        source.transform.position = position;
         source.clip = clip;
         source.volume = volume;
         source.pitch = 1f + Random.Range(-0.08f, 0.08f);
@@ -97,6 +106,48 @@ public static class GameSounds
         source.minDistance = 2f;
         source.maxDistance = maxDistance;
         source.Play();
-        Object.Destroy(go, clip.length / Mathf.Max(0.5f, source.pitch) + 0.1f);
+    }
+
+    private static Transform GetRoot()
+    {
+        if (_root == null)
+        {
+            GameObject go = new GameObject("GameSounds");
+            Object.DontDestroyOnLoad(go);
+            _root = go.transform;
+        }
+
+        return _root;
+    }
+
+    private static AudioSource GetSpatialSource()
+    {
+        for (int i = 0; i < SpatialSources.Count; i++)
+        {
+            AudioSource source = SpatialSources[i];
+            if (source == null)
+            {
+                SpatialSources.RemoveAt(i--);
+                continue;
+            }
+
+            if (!source.isPlaying)
+            {
+                return source;
+            }
+        }
+
+        // 무리의 소리가 한꺼번에 겹쳐도 오디오 오브젝트 수는 제한한다.
+        if (SpatialSources.Count >= MaxSpatialVoices)
+        {
+            return null;
+        }
+
+        GameObject go = new GameObject("SpatialVoice_" + SpatialSources.Count);
+        go.transform.SetParent(GetRoot(), false);
+        AudioSource created = go.AddComponent<AudioSource>();
+        created.playOnAwake = false;
+        SpatialSources.Add(created);
+        return created;
     }
 }

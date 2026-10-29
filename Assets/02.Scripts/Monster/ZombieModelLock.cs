@@ -23,6 +23,7 @@ public class ZombieModelLock : MonoBehaviour
     };
 
     private Animator _animator;
+    private Renderer[] _renderers;
     private Transform _model;
     private Vector3 _baseLocalPosition;
     private Transform[] _bones;
@@ -30,6 +31,7 @@ public class ZombieModelLock : MonoBehaviour
     private float _ground;
     private float _groundTimer;
     private static bool _reported;
+    private static readonly RaycastHit[] GroundHits = new RaycastHit[32];
 
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
     private static void ResetStatics()
@@ -49,6 +51,9 @@ public class ZombieModelLock : MonoBehaviour
         _animator.applyRootMotion = false;
         _model = _animator.transform;
         _baseLocalPosition = _model.localPosition;
+        _renderers = _model.GetComponentsInChildren<Renderer>();
+        _ground = transform.position.y;
+        _groundTimer = Random.Range(0f, 0.15f);
 
         // 뼈 모으기: Humanoid면 발/엉덩이/머리/손, Generic이면 메시에 붙은 모든 뼈
         List<Transform> bones = new List<Transform>();
@@ -95,7 +100,7 @@ public class ZombieModelLock : MonoBehaviour
 
         // 1. 처음 자리로 (Root Motion으로 밀려난 것 되돌리기)
         _model.localPosition = _baseLocalPosition;
-        if (_bones == null)
+        if (_bones == null || !IsModelVisible())
         {
             return;
         }
@@ -104,9 +109,13 @@ public class ZombieModelLock : MonoBehaviour
         float lowest = float.MaxValue;
         foreach (Transform bone in _bones)
         {
-            if (bone != null && bone.position.y < lowest)
+            if (bone != null)
             {
-                lowest = bone.position.y;
+                float height = bone.position.y;
+                if (height < lowest)
+                {
+                    lowest = height;
+                }
             }
         }
 
@@ -149,11 +158,20 @@ public class ZombieModelLock : MonoBehaviour
     private float GroundHeight()
     {
         Vector3 from = transform.position + Vector3.up * 1f;
-        RaycastHit[] hits = Physics.RaycastAll(from, Vector3.down, 3f, ~0, QueryTriggerInteraction.Ignore);
+        int count = Physics.RaycastNonAlloc(from, Vector3.down, GroundHits, 3f, ~0, QueryTriggerInteraction.Ignore);
+        RaycastHit[] hits = GroundHits;
+        // 아주 빽빽한 곳에서 버퍼가 차면 정확한 바닥 판정을 우선한다.
+        if (count == GroundHits.Length)
+        {
+            hits = Physics.RaycastAll(from, Vector3.down, 3f, ~0, QueryTriggerInteraction.Ignore);
+            count = hits.Length;
+        }
+
         float best = transform.position.y;
         float bestDistance = float.MaxValue;
-        foreach (RaycastHit hit in hits)
+        for (int i = 0; i < count; i++)
         {
+            RaycastHit hit = hits[i];
             if (hit.collider.transform.IsChildOf(transform) || hit.collider.GetComponentInParent<Zombie>() != null)
             {
                 continue;
@@ -167,5 +185,23 @@ public class ZombieModelLock : MonoBehaviour
         }
 
         return best;
+    }
+
+    private bool IsModelVisible()
+    {
+        if (_renderers == null || _renderers.Length == 0)
+        {
+            return true;
+        }
+
+        foreach (Renderer renderer in _renderers)
+        {
+            if (renderer != null && renderer.isVisible)
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 }

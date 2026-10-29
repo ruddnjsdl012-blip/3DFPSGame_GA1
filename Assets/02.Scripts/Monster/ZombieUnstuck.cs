@@ -29,6 +29,7 @@ public class ZombieUnstuck : MonoBehaviour
         _player = player != null ? player.transform : null;
         _camera = Camera.main;
         _lastPosition = transform.position;
+        _checkTimer = Random.Range(0f, Mathf.Max(0.1f, _checkInterval));
 
         // 붐비는 곳에서 서로 밀어 벽으로 끼지 않게: 좋은 회피, 그리고 서로 다른 우선순위
         if (_agent != null)
@@ -41,7 +42,8 @@ public class ZombieUnstuck : MonoBehaviour
 
     private void Update()
     {
-        if (_agent == null || _zombie == null || _player == null || _zombie.IsDead || !_agent.enabled)
+        if (_agent == null || _zombie == null || _player == null || _zombie.IsDead || !_agent.enabled
+            || GameManager.Instance == null || GameManager.Instance.State != GameState.Playing)
         {
             return;
         }
@@ -66,7 +68,7 @@ public class ZombieUnstuck : MonoBehaviour
         }
 
         // 2. 쫓아가는 중에만 끼임을 본다. (공격, 멈칫, 대기 중에는 멈춰 있는 게 정상)
-        bool chasing = _zombie.State == ZombieState.Trace && !_agent.isStopped;
+        bool chasing = _zombie.State == ZombieState.Trace && !_agent.isStopped && !_agent.pathPending;
         float toPlayer = Vector3.Distance(transform.position, _player.position);
         float moved = Vector3.Distance(Flat(transform.position), Flat(_lastPosition));
         _lastPosition = transform.position;
@@ -124,16 +126,10 @@ public class ZombieUnstuck : MonoBehaviour
 
     private Vector3 NextCorner()
     {
-        if (_agent.hasPath && _agent.path != null)
+        if (_agent.hasPath && !_agent.pathPending)
         {
-            Vector3[] corners = _agent.path.corners;
-            for (int i = 1; i < corners.Length; i++)
-            {
-                if (Vector3.Distance(corners[i], transform.position) > 1.5f)
-                {
-                    return corners[i];
-                }
-            }
+            // path/corners 복사 대신 에이전트가 이미 계산한 다음 모퉁이를 쓴다.
+            return _agent.steeringTarget;
         }
 
         return _player.position;

@@ -26,6 +26,7 @@ public class SpecialZombie : MonoBehaviour
 
     public SpecialType Type => _type;
     public Zombie Zombie => _zombie;
+    public bool IsUsingAbility => _pauseTimer > 0f;
 
     public static string DisplayName(SpecialType type)
     {
@@ -101,6 +102,11 @@ public class SpecialZombie : MonoBehaviour
         }
 
         _zombie.Died += OnDied;
+        ZombieHealthBar healthBar = GetComponent<ZombieHealthBar>();
+        if (healthBar != null)
+        {
+            healthBar.SetVisible(true);
+        }
     }
 
     private void Start()

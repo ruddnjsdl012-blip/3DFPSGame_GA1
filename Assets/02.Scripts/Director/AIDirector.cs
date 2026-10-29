@@ -89,6 +89,13 @@ public class AIDirector : MonoBehaviour
     private float _hordeTimer;
     private float _swarmTimer;
     private float _cleanupTimer;
+    private float _nextRouteCheckTime;
+    private float _nextTankAttemptTime;
+    private int _lastHudAlive = -1;
+    private int _lastHudKills = -1;
+    private int _lastFinaleSecond = -1;
+    private readonly List<Transform> _hiddenSpawnPoints = new List<Transform>(64);
+    private readonly List<Transform> _visibleSpawnPoints = new List<Transform>(64);
     private int _kills;
     private int _hordeQueue;
     private float _hordeQueueTimer;
@@ -178,7 +185,12 @@ public class AIDirector : MonoBehaviour
         UpdateIntensity(dt);
         CleanUp(dt);
         UpdateHordeQueue(dt);
-        _hud.SetInfo($"좀비 {_alive.Count}   처치 {_kills}");
+        if (_lastHudAlive != _alive.Count || _lastHudKills != _kills)
+        {
+            _lastHudAlive = _alive.Count;
+            _lastHudKills = _kills;
+            _hud.SetInfo($"좀비 {_alive.Count}   처치 {_kills}");
+        }
 
         // 중간 안전가옥 (L4D 체크포인트): 안에 있는 동안은 좀비가 새로 나오지 않는다.
         if (UpdateMidSafeRoom())
@@ -479,15 +491,19 @@ public class AIDirector : MonoBehaviour
     // 경로를 절반 넘게 지나면 탱크가 한 번 나온다.
     private void CheckRouteTank()
     {
-        if (_routeTankSpawned || _map.RoutePoints == null || _map.RoutePoints.Length < 2)
+        if (_routeTankSpawned || _map.RoutePoints == null || _map.RoutePoints.Length < 2
+            || Time.time < _nextRouteCheckTime)
         {
             return;
         }
 
+        _nextRouteCheckTime = Time.time + 0.5f;
         float progress = (float)_map.GetRouteIndex(_player.position) / (_map.RoutePoints.Length - 1);
-        if (progress >= _tankRouteProgress && SpawnSpecial(SpecialType.Tank, false))
+        if (progress >= _tankRouteProgress && Time.time >= _nextTankAttemptTime)
         {
-            _routeTankSpawned = true;
+            // 스폰 장소를 못 찾았을 때 매 프레임 경로 탐색을 다시 하지 않는다.
+            _nextTankAttemptTime = Time.time + 1f;
+            _routeTankSpawned = SpawnSpecial(SpecialType.Tank, false);
         }
     }
 
@@ -642,8 +658,10 @@ public class AIDirector : MonoBehaviour
             return null;
         }
 
-        List<Transform> hidden = new List<Transform>();
-        List<Transform> visible = new List<Transform>();
+        List<Transform> hidden = _hiddenSpawnPoints;
+        List<Transform> visible = _visibleSpawnPoints;
+        hidden.Clear();
+        visible.Clear();
         foreach (Transform point in points)
         {
             if (point == null)
@@ -782,13 +800,19 @@ public class AIDirector : MonoBehaviour
     private void UpdateFinale(float dt)
     {
         _phaseTimer -= dt;
-        _hud.SetTimer($"헬기 도착까지 {Mathf.CeilToInt(Mathf.Max(0f, _phaseTimer))}초");
+        int second = Mathf.CeilToInt(Mathf.Max(0f, _phaseTimer));
+        if (_lastFinaleSecond != second)
+        {
+            _lastFinaleSecond = second;
+            _hud.SetTimer($"헬기 도착까지 {second}초");
+        }
 
         // 특수 좀비, 그리고 피날레 중간에 탱크 한 번
         UpdateSpecials(dt, true);
-        if (!_finaleTankSpawned && _phaseTimer <= _finaleTime * 0.5f && SpawnSpecial(SpecialType.Tank, true))
+        if (!_finaleTankSpawned && _phaseTimer <= _finaleTime * 0.5f && Time.time >= _nextTankAttemptTime)
         {
-            _finaleTankSpawned = true;
+            _nextTankAttemptTime = Time.time + 1f;
+            _finaleTankSpawned = SpawnSpecial(SpecialType.Tank, true);
         }
 
         // 쉬지 않고 광장 곳곳에서 나온다.
