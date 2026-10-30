@@ -144,7 +144,7 @@ public class AIDirector : MonoBehaviour
         _radio = FindChild(_map.transform, "Radio");
 
         _hud = DirectorHUD.Create();
-        _hud.SetObjective("안전가옥을 나가 광장의 무전기로 가라");
+        _hud.SetObjective(_map.TextStart);
 
         _audio = gameObject.AddComponent<AudioSource>();
         _audio.playOnAwake = false;
@@ -282,7 +282,7 @@ public class AIDirector : MonoBehaviour
             }
             else
             {
-                _hud.SetObjective("주차타워 옥상 → 고가도로를 지나 광장의 무전기로 가라");
+                _hud.SetObjective(_map.TextAfterMidRoom);
                 // 나가자마자 쉬지 못하게: 다음 호드를 조금 당긴다.
                 _hordeTimer = Mathf.Min(_hordeTimer, 15f);
                 _intensity = Mathf.Min(_intensity, 0.3f);
@@ -742,7 +742,7 @@ public class AIDirector : MonoBehaviour
         }
 
         // 가운데에 건물이 막고 있으면 보이지 않는다.
-        return !Physics.Linecast(_camera.transform.position, target, ~0, QueryTriggerInteraction.Ignore);
+        return !Physics.Linecast(_camera.transform.position, target, Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore);
     }
 
     private int CountHunters()
@@ -800,7 +800,7 @@ public class AIDirector : MonoBehaviour
 
         Vector3 radio = _radio != null ? _radio.position : _map.ExtractionPoint.position;
         bool near = Vector3.Distance(Flat(radio), Flat(_player.position)) < 3f;
-        _hud.SetObjective(near ? "무전기로 구조를 요청하라" : "광장 가운데의 무전기로 가라");
+        _hud.SetObjective(near ? "무전기로 구조를 요청하라" : _map.TextRadioFar);
         PlayerInventory inventory = _player.GetComponent<PlayerInventory>();
         bool pickupUsed = inventory != null && inventory.InteractionConsumedThisFrame;
         bool aimingPickup = inventory != null && inventory.HasPickupFocus;
@@ -825,7 +825,7 @@ public class AIDirector : MonoBehaviour
         ChangePhase(Phase.Finale, _finaleTime);
         _swarmTimer = 8f;
         _hud.SetPrompt(string.Empty);
-        _hud.SetObjective("구조 헬기가 올 때까지 버텨라!");
+        _hud.SetObjective(_map.TextHoldOut);
         _hud.ShowAlert("구조 요청 완료! 놈들이 몰려온다!", new Color(1f, 0.3f, 0.2f), 3.5f);
         _audio.PlayOneShot(_alarmClip, 0.8f);
         _audio.PlayOneShot(_hornClip, 0.9f);
@@ -838,7 +838,7 @@ public class AIDirector : MonoBehaviour
         if (_lastFinaleSecond != second)
         {
             _lastFinaleSecond = second;
-            _hud.SetTimer($"헬기 도착까지 {second}초");
+            _hud.SetTimer(string.Format(_map.TextTimer, second));
         }
 
         // 특수 좀비, 그리고 피날레 중간에 탱크 한 번
@@ -878,8 +878,8 @@ public class AIDirector : MonoBehaviour
         {
             ChangePhase(Phase.Escape, 0f);
             _hud.SetTimer(string.Empty);
-            _hud.SetObjective("헬기가 왔다! 헬기장으로 달려라!");
-            _hud.ShowAlert("헬기 도착!", new Color(0.4f, 1f, 0.5f), 3f);
+            _hud.SetObjective(_map.TextEscape);
+            _hud.ShowAlert(_map.TextArrive, new Color(0.4f, 1f, 0.5f), 3f);
             _audio.PlayOneShot(_alarmClip, 0.8f);
             CreateBeacon();
         }

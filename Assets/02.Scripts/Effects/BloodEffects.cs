@@ -271,7 +271,7 @@ public static class BloodEffects
     // 좀비와 플레이어는 지나쳐서, 그 뒤의 벽이나 바닥을 찾는다.
     private static bool FindSurface(Vector3 from, Vector3 direction, float distance, out RaycastHit result)
     {
-        int count = Physics.RaycastNonAlloc(from, direction.normalized, Hits, distance, ~0, QueryTriggerInteraction.Ignore);
+        int count = Physics.RaycastNonAlloc(from, direction.normalized, Hits, distance, Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore);
         result = new RaycastHit();
         float best = float.MaxValue;
         bool found = false;

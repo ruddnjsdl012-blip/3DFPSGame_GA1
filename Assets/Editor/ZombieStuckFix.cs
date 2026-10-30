@@ -69,6 +69,13 @@ public static class ZombieStuckFix
             return;
         }
 
+        if (map.UsesBakedNavigation)
+        {
+            // Flooded 맵은 에셋 원본 콜라이더를 그대로 쓰고, 전용 메뉴로 NavMesh를 굽는다.
+            EditorUtility.DisplayDialog("좀비 끼임 고치기", "지금 맵은 Flooded Grounds 맵입니다.\nTools > L4D 맵 > Flooded 맵 NavMesh 다시 굽기를 사용하세요.", "확인");
+            return;
+        }
+
         List<string> log = new List<string>();
         Undo.SetCurrentGroupName("좀비 끼임 고치기");
         int group = Undo.GetCurrentGroup();

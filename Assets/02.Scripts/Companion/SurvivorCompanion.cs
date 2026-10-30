@@ -258,7 +258,7 @@ public sealed class SurvivorCompanion : MonoBehaviour
         Vector3 from = transform.position + Vector3.up * 1.35f;
         Vector3 to = AimPoint(enemy);
         if (_squad.FriendlyBlocks(from, to, this)) return false;
-        if (Physics.Linecast(from, to, out RaycastHit hit, ~0, QueryTriggerInteraction.Ignore))
+        if (Physics.Linecast(from, to, out RaycastHit hit, Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore))
             return hit.collider.GetComponentInParent<Zombie>() == enemy;
         return true;
     }
@@ -322,7 +322,7 @@ public sealed class SurvivorCompanion : MonoBehaviour
         Vector3 direction = (aim - origin).normalized;
         float range = _weapon == WeaponSlot.Rifle ? 30f : 20f;
         if (_squad.FriendlyBlocks(origin, aim, this)) return;
-        int count = Physics.RaycastNonAlloc(origin, direction, _shots, range, ~0, QueryTriggerInteraction.Ignore);
+        int count = Physics.RaycastNonAlloc(origin, direction, _shots, range, Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore);
         RaycastHit nearest = default;
         float best = range;
         for (int i = 0; i < count; i++)

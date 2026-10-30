@@ -22,6 +22,30 @@ public class CityMapInfo : MonoBehaviour
     [SerializeField] private BoxCollider _finaleArea;        // 피날레 광장 범위
     [SerializeField] private Transform _extractionPoint;    // 구조 지점 (헬기장)
 
+    [Header("맵 설정 (Flooded 맵 만들기가 채운다)")]
+    [SerializeField] private bool _bakedNavigation;      // 에디터에서 미리 구운 NavMesh를 쓴다 (실행할 때 다시 굽지 않는다)
+    [SerializeField] private bool _keepSceneAtmosphere;  // 씬의 안개/조명을 그대로 쓴다 (도시 맵용 분위기 스크립트를 붙이지 않는다)
+
+    [Header("안내 문구 (비우면 도시 맵 기본 문구)")]
+    [SerializeField] private string _textStart;
+    [SerializeField] private string _textAfterMidRoom;
+    [SerializeField] private string _textRadioFar;
+    [SerializeField] private string _textHoldOut;
+    [SerializeField] private string _textTimer;          // {0} = 남은 초
+    [SerializeField] private string _textEscape;
+    [SerializeField] private string _textArrive;
+
+    public bool UsesBakedNavigation => _bakedNavigation;
+    public string TextStart => Pick(_textStart, "안전가옥을 나가 광장의 무전기로 가라");
+    public string TextAfterMidRoom => Pick(_textAfterMidRoom, "주차타워 옥상 → 고가도로를 지나 광장의 무전기로 가라");
+    public string TextRadioFar => Pick(_textRadioFar, "광장 가운데의 무전기로 가라");
+    public string TextHoldOut => Pick(_textHoldOut, "구조 헬기가 올 때까지 버텨라!");
+    public string TextTimer => Pick(_textTimer, "헬기 도착까지 {0}초");
+    public string TextEscape => Pick(_textEscape, "헬기가 왔다! 헬기장으로 달려라!");
+    public string TextArrive => Pick(_textArrive, "헬기 도착!");
+
+    private static string Pick(string value, string fallback) => string.IsNullOrEmpty(value) ? fallback : value;
+
     public Transform StartPoint => _startPoint;
     public BoxCollider StartSafeRoomArea => _startSafeRoomArea;
     public Transform[] RoutePoints => _routePoints;
@@ -31,8 +55,12 @@ public class CityMapInfo : MonoBehaviour
 
     private void Awake()
     {
-        CityMapNavigation.Prepare(this);
-        if (GetComponent<CityMapAtmosphere>() == null)
+        if (!_bakedNavigation)
+        {
+            CityMapNavigation.Prepare(this);
+        }
+
+        if (!_keepSceneAtmosphere && GetComponent<CityMapAtmosphere>() == null)
         {
             gameObject.AddComponent<CityMapAtmosphere>();
         }

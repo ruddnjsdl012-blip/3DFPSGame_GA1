@@ -7,7 +7,7 @@ public static class BulletHit
 {
     public static bool Fire(Ray ray, float range, float damage, float headshotMultiplier, ParticleSystem impactPrefab)
     {
-        if (!Physics.Raycast(ray, out RaycastHit hit, range, ~0, QueryTriggerInteraction.Ignore))
+        if (!Physics.Raycast(ray, out RaycastHit hit, range, Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore))
         {
             return false;
         }

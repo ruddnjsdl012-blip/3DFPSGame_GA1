@@ -35,7 +35,7 @@ public class AcidBall : MonoBehaviour
         Vector3 end = start + _velocity * dt;
 
         // 처음 잠깐은 뱉은 스피터 몸에 부딪히지 않게 무시한다.
-        if (_age > 0.12f && Physics.Linecast(start, end, out RaycastHit hit, ~0, QueryTriggerInteraction.Ignore))
+        if (_age > 0.12f && Physics.Linecast(start, end, out RaycastHit hit, Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore))
         {
             Land(hit.point);
             return;
@@ -52,7 +52,7 @@ public class AcidBall : MonoBehaviour
     {
         // 맞은 곳 아래 바닥에 웅덩이
         Vector3 ground = point;
-        if (Physics.Raycast(point + Vector3.up * 0.5f, Vector3.down, out RaycastHit floor, 6f, ~0, QueryTriggerInteraction.Ignore))
+        if (Physics.Raycast(point + Vector3.up * 0.5f, Vector3.down, out RaycastHit floor, 6f, Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore))
         {
             ground = floor.point;
         }

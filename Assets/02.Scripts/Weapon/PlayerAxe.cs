@@ -116,7 +116,7 @@ public class PlayerAxe : MonoBehaviour
 
                 // 벽 너머 좀비는 못 벤다.
                 Vector3 body = zombie.transform.position + Vector3.up * 1.2f * zombie.transform.lossyScale.y;
-                if (Physics.Linecast(origin, body, out RaycastHit block, ~0, QueryTriggerInteraction.Ignore)
+                if (Physics.Linecast(origin, body, out RaycastHit block, Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore)
                     && block.collider.GetComponentInParent<Zombie>() == null && block.collider.GetComponentInParent<Player>() == null)
                 {
                     continue;
@@ -152,7 +152,7 @@ public class PlayerAxe : MonoBehaviour
             GameSounds.Play2D("axe_hit", 0.9f, 0.08f);
             CameraShake.ShakeMain(0.25f + 0.05f * hitZombies.Count);
         }
-        else if (!hitSomething && Physics.Raycast(origin, forward, out RaycastHit wall, _reach, ~0, QueryTriggerInteraction.Ignore)
+        else if (!hitSomething && Physics.Raycast(origin, forward, out RaycastHit wall, _reach, Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore)
                  && wall.collider.GetComponentInParent<Player>() == null)
         {
             GameSounds.PlayAt("impact_concrete", wall.point, 0.9f, 0.05f);
