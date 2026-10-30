@@ -243,6 +243,7 @@ public class Zombie : MonoBehaviour, IDamageable
             BloodEffects.Death(this);  // 크게 튀고, 쓰러진 자리에 피 웅덩이
             GameSounds.PlayAt("zombie_death", transform.position, 0.9f, 0.1f);
             _state = ZombieState.Death;
+            ScreenBloodSplatter.OnZombieKilled(this, damageInfo.HitPoint);
             Died?.Invoke(this);
             StartCoroutine(Death_Coroutine());
         }

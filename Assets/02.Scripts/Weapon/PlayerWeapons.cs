@@ -148,6 +148,8 @@ public class PlayerWeapons : MonoBehaviour
     {
         _grenade = GetComponent<PlayerGrenade>();
         _inventory = GetComponent<PlayerInventory>();
+        ScreenBloodSplatter.Ensure();
+        SurvivorSquad.Ensure(gameObject);
         BuildSlotBar();
         if (FindAnyObjectByType<CityMapInfo>() == null) GrantStarterFallback();
     }

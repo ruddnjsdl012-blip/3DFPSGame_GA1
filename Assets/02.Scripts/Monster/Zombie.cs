@@ -85,6 +85,7 @@ public class Zombie : MonoBehaviour, IDamageable
     public float MaxHealth => _maxHealth;
     public float Health => _health;
     public bool IsDead => _state == ZombieState.Death;
+    public bool IsCombatReady => _agent != null && _animator != null && _health > 0f && !IsDead;
     public ZombieState State => _state;
     public Transform Target => _player != null ? _player.transform : null;
     public bool CanPursue => !IsDead && _state == ZombieState.Trace && _player != null
@@ -99,6 +100,9 @@ public class Zombie : MonoBehaviour, IDamageable
 
 
     private ZombieState _state = ZombieState.Idle;
+
+    private void OnEnable() { SurvivorSquad.Register(this); }
+    private void OnDisable() { SurvivorSquad.Unregister(this); }
 
     private void Start()
     {
@@ -215,6 +219,7 @@ public class Zombie : MonoBehaviour, IDamageable
         }
 
         _health -= damageInfo.Value;
+        if (damageInfo.Value > 0f) SurvivorSquad.PlayerAttacked(this);
 
         StopAllCoroutines();
 
@@ -243,6 +248,7 @@ public class Zombie : MonoBehaviour, IDamageable
             BloodEffects.Death(this);  // 크게 튀고, 쓰러진 자리에 피 웅덩이
             GameSounds.PlayAt("zombie_death", transform.position, 0.9f, 0.1f);
             _state = ZombieState.Death;
+            ScreenBloodSplatter.OnZombieKilled(this, damageInfo.HitPoint);
             Died?.Invoke(this);
             StartCoroutine(Death_Coroutine());
         }
@@ -445,6 +451,7 @@ public class Zombie : MonoBehaviour, IDamageable
         };
 
         _playerDamageable.TakeDamage(info);
+        SurvivorSquad.PlayerHurt(this);
         Attacked?.Invoke(this);
     }
 

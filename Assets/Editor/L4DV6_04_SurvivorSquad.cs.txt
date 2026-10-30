@@ -1,0 +1,219 @@
+using System.Collections;
+using System.Collections.Generic;
+using UnityEngine;
+using UnityEngine.AI;
+using UnityEngine.SceneManagement;
+
+// 기존 플레이어의 몸 모델만 복제한다. 플레이어/카메라/인벤토리는 복제하지 않는다.
+[DisallowMultipleComponent]
+public sealed class SurvivorSquad : MonoBehaviour
+{
+    [SerializeField, Range(1, 3)] private int _companionCount = 3;
+    private static SurvivorSquad _instance;
+    private static readonly List<Zombie> Enemies = new List<Zombie>(128);
+    private static int _allyDamageDepth;
+    private readonly List<SurvivorCompanion> _members = new List<SurvivorCompanion>(3);
+    private GameObject _root;
+    private Zombie _priority;
+    private float _priorityUntil;
+    private float _hurtPriorityUntil;
+    public Transform Leader => transform;
+    public static bool IsAllyDamage => _allyDamageDepth > 0;
+    public static IReadOnlyList<Zombie> ActiveEnemies => Enemies;
+    public Zombie PriorityTarget => _priority != null && !_priority.IsDead && Time.time < _priorityUntil ? _priority : null;
+
+    [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+    private static void ResetStatics()
+    {
+        _instance = null;
+        _allyDamageDepth = 0;
+        Enemies.Clear();
+    }
+
+    public static void Ensure(GameObject player)
+    {
+        if (player == null || player.GetComponent<SurvivorSquad>() != null) return;
+        if (Object.FindAnyObjectByType<CityMapInfo>() == null) return;
+        player.AddComponent<SurvivorSquad>();
+    }
+
+    public static void Register(Zombie zombie)
+    {
+        if (zombie != null && !Enemies.Contains(zombie)) Enemies.Add(zombie);
+    }
+
+    public static void Unregister(Zombie zombie)
+    {
+        Enemies.Remove(zombie);
+    }
+
+    public static void PlayerAttacked(Zombie enemy)
+    {
+        if (!IsAllyDamage && _instance != null) _instance.Prioritize(enemy, false);
+    }
+
+    public static void PlayerHurt(Zombie enemy)
+    {
+        if (_instance != null) _instance.Prioritize(enemy, true);
+    }
+
+    private void Prioritize(Zombie enemy, bool hurt)
+    {
+        if (enemy == null || enemy.IsDead || (enemy.transform.position - transform.position).sqrMagnitude > 100f) return;
+        if (!hurt && Time.time < _hurtPriorityUntil && PriorityTarget != null && _priority != enemy) return;
+        _priority = enemy;
+        _priorityUntil = Time.time + 5f;
+        if (hurt) _hurtPriorityUntil = Time.time + 1.5f;
+        foreach (SurvivorCompanion member in _members)
+            if (member != null) member.ReconsiderTarget();
+    }
+
+    // 동료 공격은 플레이어의 공격 알림/화면 피로 재입력되지 않게 출처를 보존한다.
+    public static void DealAllyDamage(Zombie target, DamageInfo info)
+    {
+        if (target == null || target.IsDead) return;
+        _allyDamageDepth++;
+        try { target.TakeDamage(info); }
+        finally { _allyDamageDepth--; }
+    }
+
+    private IEnumerator Start()
+    {
+        if (_instance != null && _instance != this) { Destroy(this); yield break; }
+        _instance = this;
+        yield return null; // 기존 몸/카메라 초기화가 끝난 뒤 원본 몸을 찾는다.
+        Animator source = FindBody();
+        if (source == null)
+        {
+            Debug.LogError("[L4D 동료] 플레이어의 기존 캐릭터 Animator를 찾지 못했습니다.", this);
+            yield break;
+        }
+        _root = new GameObject("AlliedSurvivors");
+        SceneManager.MoveGameObjectToScene(_root, gameObject.scene);
+        CharacterController controller = GetComponent<CharacterController>();
+        float sourceFloor = controller != null ? controller.bounds.min.y : transform.position.y;
+        // Domain Reload를 끈 프로젝트/이미 활성화된 씬도 빠뜨리지 않는다. 시작 시 한 번만 검색한다.
+        foreach (Zombie zombie in Object.FindObjectsByType<Zombie>(FindObjectsSortMode.None)) Register(zombie);
+        int created = 0;
+        float retryUntil = Time.time + 12f;
+        while (created < _companionCount && Time.time < retryUntil)
+        {
+            if (!TrySpawnPosition(created, out Vector3 position)) { yield return new WaitForSeconds(0.3f); continue; }
+            GameObject actor = new GameObject("Survivor_" + (created + 1));
+            actor.SetActive(false);
+            actor.transform.SetParent(_root.transform, false);
+            actor.transform.SetPositionAndRotation(position, transform.rotation);
+            // 몸을 숨기기 위해 Player 레이어를 제외한 카메라에서도 동료는 보인다.
+            actor.layer = 0;
+            NavMeshAgent agent = actor.AddComponent<NavMeshAgent>();
+            agent.radius = 0.34f;
+            agent.height = 1.8f;
+            agent.baseOffset = 0f;
+            agent.speed = 6.7f;
+            agent.acceleration = 24f;
+            agent.angularSpeed = 600f;
+            agent.stoppingDistance = 0.2f;
+            agent.autoBraking = true;
+            agent.obstacleAvoidanceType = ObstacleAvoidanceType.HighQualityObstacleAvoidance;
+            agent.avoidancePriority = 35 + created * 9;
+            GameObject copy = Instantiate(source.gameObject, actor.transform, false);
+            copy.name = "ExistingSurvivorModel";
+            copy.SetActive(true);
+            copy.transform.localPosition = transform.InverseTransformPoint(source.transform.position);
+            Vector3 localModel = copy.transform.localPosition;
+            localModel.y = source.transform.position.y - sourceFloor;
+            copy.transform.localPosition = localModel;
+            copy.transform.localRotation = Quaternion.Inverse(transform.rotation) * source.transform.rotation;
+            copy.transform.localScale = source.transform.lossyScale;
+            foreach (Transform child in copy.GetComponentsInChildren<Transform>(true)) { child.gameObject.layer = actor.layer; child.gameObject.tag = "Untagged"; }
+            foreach (MonoBehaviour script in copy.GetComponentsInChildren<MonoBehaviour>(true)) { script.enabled = false; Destroy(script); }
+            foreach (Collider collider in copy.GetComponentsInChildren<Collider>(true)) { collider.enabled = false; Destroy(collider); }
+            foreach (Rigidbody body in copy.GetComponentsInChildren<Rigidbody>(true)) { body.isKinematic = true; body.detectCollisions = false; Destroy(body); }
+            foreach (Camera camera in copy.GetComponentsInChildren<Camera>(true))
+            { camera.enabled = false; if (camera.gameObject != copy) Destroy(camera.gameObject); else Destroy(camera); }
+            foreach (Canvas canvas in copy.GetComponentsInChildren<Canvas>(true))
+            { canvas.enabled = false; if (canvas.gameObject != copy) Destroy(canvas.gameObject); else Destroy(canvas); }
+            foreach (NavMeshAgent copiedAgent in copy.GetComponentsInChildren<NavMeshAgent>(true)) { copiedAgent.enabled = false; Destroy(copiedAgent); }
+            foreach (NavMeshObstacle obstacle in copy.GetComponentsInChildren<NavMeshObstacle>(true)) { obstacle.enabled = false; Destroy(obstacle); }
+            foreach (Light light in copy.GetComponentsInChildren<Light>(true)) { light.enabled = false; Destroy(light); }
+            foreach (Animator animator in copy.GetComponentsInChildren<Animator>(true)) animator.fireEvents = false;
+            foreach (AudioListener listener in copy.GetComponentsInChildren<AudioListener>(true)) Destroy(listener);
+            foreach (AudioSource audio in copy.GetComponentsInChildren<AudioSource>(true)) { audio.enabled = false; Destroy(audio); }
+            SurvivorCompanion companion = actor.AddComponent<SurvivorCompanion>();
+            companion.Configure(this, copy.GetComponent<Animator>(), created);
+            _members.Add(companion);
+            created++;
+            // 복제본의 기존 스크립트가 제거된 다음 활성화해 Awake/Start의 부작용을 막는다.
+            yield return null;
+            if (actor != null) actor.SetActive(true);
+        }
+        if (created != _companionCount) Debug.LogWarning("[L4D 동료] 시작 지점의 걸을 수 있는 공간에 동료 " + created + "명을 배치했습니다.", this);
+    }
+
+    private Animator FindBody()
+    {
+        Transform model = transform.Find("Model");
+        if (model != null)
+        {
+            Animator animator = model.GetComponentInChildren<Animator>(true);
+            if (animator != null) return animator;
+        }
+        foreach (Animator animator in GetComponentsInChildren<Animator>(true))
+        {
+            if (animator.GetComponentInParent<Camera>() != null || animator.name.StartsWith("FP_")
+                || animator.name.StartsWith("FirstPerson")) continue;
+            if (animator.isHuman && animator.GetBoneTransform(HumanBodyBones.Hips) != null) return animator;
+        }
+        return null;
+    }
+
+    private bool TrySpawnPosition(int index, out Vector3 position)
+    {
+        position = transform.position;
+        int zombieLayer = LayerMask.NameToLayer("Zombie");
+        if (!ZombieNavigationTarget.TryGet(transform, 0, NavMesh.AllAreas,
+            zombieLayer >= 0 ? zombieLayer : gameObject.layer, out Vector3 floor)) return false;
+        for (int i = 0; i < 24; i++)
+        {
+            float angle = (index * 120f + i * 47f + 100f) * Mathf.Deg2Rad;
+            float radius = 1.5f + (i / 8) * 0.65f;
+            Vector3 wanted = floor + transform.right * Mathf.Cos(angle) * radius + transform.forward * Mathf.Sin(angle) * radius;
+            if (!SurvivorNavigation.Sample(wanted, floor, null, out Vector3 candidate)) continue;
+            if ((candidate - transform.position).sqrMagnitude < 1.1f) continue;
+            bool occupied = false;
+            foreach (SurvivorCompanion member in _members)
+                if (member != null && (member.transform.position - candidate).sqrMagnitude < 0.85f) occupied = true;
+            if (occupied) continue;
+            position = candidate;
+            return true;
+        }
+        return false;
+    }
+
+    public bool FriendlyBlocks(Vector3 from, Vector3 to, SurvivorCompanion shooter)
+    {
+        if (BlocksBody(transform.position, from, to, 0.4f)) return true;
+        foreach (SurvivorCompanion member in _members)
+            if (member != null && member != shooter && BlocksBody(member.transform.position, from, to, 0.36f)) return true;
+        return false;
+    }
+
+    private static bool BlocksBody(Vector3 feet, Vector3 from, Vector3 to, float radius)
+    {
+        Vector3 line = to - from;
+        if (line.sqrMagnitude < 0.001f) return false;
+        for (int i = 0; i < 3; i++)
+        {
+            Vector3 point = feet + Vector3.up * (0.5f + i * 0.45f);
+            float t = Vector3.Dot(point - from, line) / line.sqrMagnitude;
+            if (t > 0.02f && t < 0.98f && (from + line * t - point).sqrMagnitude < radius * radius) return true;
+        }
+        return false;
+    }
+
+    private void OnDestroy()
+    {
+        if (_instance == this) _instance = null;
+        if (_root != null) Destroy(_root);
+    }
+}

@@ -1,0 +1,207 @@
+using UnityEngine;
+using UnityEngine.UI;
+
+// 처치할 때 렌즈에 튀어 붙는 피. 같은 아틀라스/고정 UI 풀을 재사용한다.
+[DisallowMultipleComponent]
+public sealed class ScreenBloodSplatter : MonoBehaviour
+{
+    [SerializeField, Range(0f, 1f)] private float _opacity = 0.82f;
+    [SerializeField, Range(0.5f, 6f)] private float _stainSeconds = 2.8f;
+    private const int PoolSize = 18;
+    private static ScreenBloodSplatter _instance;
+    private sealed class Stain
+    {
+        public RawImage Image;
+        public RectTransform Rect;
+        public Vector2 Start;
+        public Vector2 Travel;
+        public float Size;
+        public float Age;
+        public float Life;
+        public float Alpha;
+        public bool Active;
+    }
+    private Stain[] _stains;
+    private Canvas _canvas;
+    private Texture2D _atlas;
+    private int _next;
+    private float _nextBurst;
+
+    public static ScreenBloodSplatter Ensure()
+    {
+        if (_instance != null) return _instance;
+        Camera camera = Camera.main;
+        if (camera == null) return null;
+        ScreenBloodSplatter effect = camera.GetComponent<ScreenBloodSplatter>();
+        if (effect == null) effect = camera.gameObject.AddComponent<ScreenBloodSplatter>();
+        return effect;
+    }
+
+    public static void OnZombieKilled(Zombie zombie, Vector3 hitPoint)
+    {
+        if (SurvivorSquad.IsAllyDamage || zombie == null || GameManager.Instance == null || GameManager.Instance.State != GameState.Playing) return;
+        Camera camera = Camera.main;
+        if (camera == null) return;
+        Vector3 point = hitPoint.sqrMagnitude > 0.001f ? hitPoint : zombie.transform.position + Vector3.up;
+        float distance = Vector3.Distance(camera.transform.position, point);
+        Vector3 screen = camera.WorldToViewportPoint(point);
+        float strength = KillStrength(distance, screen);
+        if (strength <= 0f) return;
+        ScreenBloodSplatter effect = Ensure();
+        if (effect != null) effect.Burst(strength, new Vector2(screen.x, screen.y));
+    }
+
+    private static float KillStrength(float distance, Vector3 screen)
+    {
+        if (distance > 120f) return 0f;
+        // 근접 처치는 시야 가장자리에서도 튄다. 시야 밖/뒤쪽의 먼 연쇄 처치는 제외한다.
+        if (distance > 3.5f && (screen.z <= 0f || screen.x < -0.15f || screen.x > 1.15f
+            || screen.y < -0.15f || screen.y > 1.15f))
+        {
+            return 0f;
+        }
+
+        return Mathf.Lerp(0.3f, 1f, 1f - Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(2f, 40f, distance)));
+    }
+
+    private void Awake()
+    {
+        if (_instance != null && _instance != this)
+        {
+            Destroy(this);
+            return;
+        }
+        _instance = this;
+        _atlas = Resources.Load<Texture2D>("Effects/ScreenBloodAtlas");
+        if (_atlas == null)
+        {
+            Debug.LogWarning("[L4D] 화면 피 효과 텍스처가 없습니다. 패키지 전체를 Import하세요.");
+            return;
+        }
+        GameObject root = new GameObject("UI_KillBlood", typeof(RectTransform), typeof(Canvas), typeof(CanvasScaler));
+        root.transform.SetParent(transform, false);
+        _canvas = root.GetComponent<Canvas>();
+        _canvas.renderMode = RenderMode.ScreenSpaceOverlay;
+        _canvas.sortingOrder = 10; // 조준점과 무기/보급 HUD 아래.
+        CanvasScaler scaler = root.GetComponent<CanvasScaler>();
+        scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
+        scaler.referenceResolution = new Vector2(1920f, 1080f);
+        scaler.matchWidthOrHeight = 0.5f;
+        _stains = new Stain[PoolSize];
+        for (int i = 0; i < PoolSize; i++)
+        {
+            GameObject child = new GameObject("BloodStain_" + i, typeof(RectTransform), typeof(RawImage));
+            child.transform.SetParent(root.transform, false);
+            RawImage image = child.GetComponent<RawImage>();
+            image.texture = _atlas;
+            image.raycastTarget = false;
+            image.enabled = false;
+            _stains[i] = new Stain { Image = image, Rect = image.rectTransform };
+        }
+        _canvas.enabled = false;
+    }
+
+    private void Burst(float strength, Vector2 hitScreen)
+    {
+        if (_canvas == null || _stains == null || Time.time < _nextBurst) return;
+        // 산탄/폭발 다중 처치가 한 프레임에 화면 전체를 덮지 않도록 한 번의 튐으로 합친다.
+        _nextBurst = Time.time + 0.075f;
+        int count = strength > 0.65f ? 4 : strength > 0.4f ? 3 : 2;
+        for (int i = 0; i < count; i++)
+        {
+            Stain stain = _stains[_next];
+            _next = (_next + 1) % PoolSize;
+            bool left = i == 0 ? hitScreen.x < 0.5f : Random.value < 0.5f;
+            Vector2 anchor;
+            if (i == 2)
+                anchor = new Vector2(Random.Range(0.28f, 0.72f), Random.value < 0.5f ? 0.06f : 0.94f);
+            else
+                anchor = new Vector2(left ? Random.Range(0.05f, 0.21f) : Random.Range(0.79f, 0.95f), Random.Range(0.18f, 0.86f));
+            stain.Rect.anchorMin = stain.Rect.anchorMax = anchor;
+            stain.Rect.pivot = new Vector2(0.5f, 0.5f);
+            stain.Rect.localRotation = Quaternion.Euler(0f, 0f, Random.Range(-20f, 20f));
+            stain.Size = Random.Range(310f, 480f) * Mathf.Lerp(0.8f, 1.35f, strength);
+            stain.Rect.sizeDelta = new Vector2(stain.Size, stain.Size);
+            stain.Start = Vector2.zero;
+            stain.Travel = new Vector2(left ? -16f : 16f, Random.Range(-12f, -25f));
+            stain.Age = 0f;
+            stain.Life = _stainSeconds * Random.Range(0.8f, 1.2f);
+            stain.Alpha = _opacity * Mathf.Lerp(0.45f, 1f, strength) * Random.Range(0.8f, 1f);
+            stain.Active = true;
+            int tile = Random.Range(0, 4);
+            stain.Image.uvRect = new Rect((tile % 2) * 0.5f, (tile / 2) * 0.5f, 0.5f, 0.5f);
+            stain.Image.color = new Color(1f, 1f, 1f, stain.Alpha);
+            stain.Image.enabled = true;
+            stain.Rect.SetAsLastSibling();
+            Animate(stain);
+        }
+        _canvas.enabled = true;
+    }
+
+    private void Update()
+    {
+        if (_canvas == null || _stains == null) return;
+        if (GameManager.Instance == null || GameManager.Instance.State != GameState.Playing)
+        {
+            Clear();
+            return;
+        }
+        if (Time.timeScale <= 0f || Cursor.visible)
+        {
+            _canvas.enabled = false;
+            return;
+        }
+        bool any = false;
+        for (int i = 0; i < _stains.Length; i++)
+        {
+            Stain stain = _stains[i];
+            if (!stain.Active) continue;
+            stain.Age += Time.deltaTime;
+            if (stain.Age >= stain.Life)
+            {
+                stain.Active = false;
+                stain.Image.enabled = false;
+                continue;
+            }
+            Animate(stain);
+            any = true;
+        }
+        _canvas.enabled = any;
+    }
+
+    private static void Animate(Stain stain)
+    {
+        float pop = Mathf.SmoothStep(0f, 1f, stain.Age / 0.09f);
+        float drip = Mathf.Clamp01((stain.Age - 0.25f) / stain.Life);
+        float fade = 1f - Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(0.22f, 1f, stain.Age / stain.Life));
+        float scale = Mathf.Lerp(0.65f, 1f, pop);
+        stain.Rect.localScale = new Vector3(scale, scale + drip * 0.1f, 1f);
+        stain.Rect.anchoredPosition = stain.Start + stain.Travel * (pop + drip * drip * 3f);
+        stain.Image.color = new Color(1f, 1f, 1f, (stain.Alpha * fade));
+    }
+
+    private void Clear()
+    {
+        _nextBurst = 0f;
+        if (_stains != null)
+        {
+            for (int i = 0; i < _stains.Length; i++)
+            {
+                _stains[i].Active = false;
+                _stains[i].Image.enabled = false;
+            }
+        }
+        if (_canvas != null) _canvas.enabled = false;
+    }
+
+    private void OnDisable()
+    {
+        Clear();
+    }
+
+    private void OnDestroy()
+    {
+        if (_instance == this) _instance = null;
+        if (_canvas != null) Destroy(_canvas.gameObject);
+    }
+}

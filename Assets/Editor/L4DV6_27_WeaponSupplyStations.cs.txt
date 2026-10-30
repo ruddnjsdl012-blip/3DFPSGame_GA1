@@ -1,0 +1,238 @@
+using TMPro;
+using UnityEngine;
+using UnityEngine.AI;
+
+public static class WeaponSupplyStations
+{
+    private static int WorldMask => ~LayerMask.GetMask("Player", "Zombie");
+    private static TMP_FontAsset _font;
+
+    public static int Spawn(CityMapInfo map, Transform parent, Transform radio)
+    {
+        if (map == null || map.StartPoint == null)
+        {
+            PlayerWeapons player = Object.FindAnyObjectByType<PlayerWeapons>();
+            if (player != null) player.GrantStarterFallback();
+            return 0;
+        }
+        NavMeshPath path = new NavMeshPath();
+        int count = 0;
+        Vector3 start = map.StartPoint.position;
+        Vector3 startForward = Vector3.ProjectOnPlane(map.StartPoint.forward, Vector3.up).normalized;
+        if (startForward.sqrMagnitude < 0.01f) startForward = Vector3.forward;
+        Transform starter = null;
+        foreach (float offset in new[] { 2.3f, 3.5f, 4.4f })
+        {
+            if (TryBench(start + startForward * offset, startForward, start, 3.8f, 1.15f,
+                map.StartSafeRoomArea, parent, path, out starter)) break;
+        }
+        if (starter != null)
+        {
+            starter.name = "StartWeaponTable";
+            OnTable(starter, WeaponSlot.Axe, -1.15f);
+            OnTable(starter, WeaponSlot.Revolver, 0f);
+            OnTable(starter, WeaponSlot.Rifle, 1.15f);
+            Label(starter, "[E] 무기 습득", new Vector3(0f, 1.35f, 0.5f), 3.8f, 3.3f);
+            count += 3;
+        }
+        else
+        {
+            PlayerWeapons player = Object.FindAnyObjectByType<PlayerWeapons>();
+            if (player != null) player.GrantStarterFallback();
+            Debug.LogWarning("[WeaponSupplyStations] 출발 테이블 공간이 부족해 기본 장비를 지급했습니다.", map);
+        }
+        WeaponSlot[,] weapons =
+        {
+            { WeaponSlot.Rifle, WeaponSlot.Smg },
+            { WeaponSlot.Revolver, WeaponSlot.Shotgun },
+            { WeaponSlot.Smg, WeaponSlot.Axe },
+            { WeaponSlot.Shotgun, WeaponSlot.Rifle },
+        };
+        for (int station = 0; station < 4; station++)
+        {
+            if (!RoutePoint(map, (station + 1f) / 5f, out Vector3 anchor, out Vector3 forward)) continue;
+            Vector3 right = Vector3.Cross(Vector3.up, forward);
+            Transform bench = null;
+            for (int attempt = 0; attempt < 12; attempt++)
+            {
+                float side = attempt % 2 == 0 ? 1f : -1f;
+                Vector3 desired = anchor + right * side * (2.4f + (attempt / 2) * 0.5f);
+                if (radio != null && FlatDistance(desired, radio.position) < 6f) continue;
+                if (TryBench(desired, forward, anchor, 2.8f, 1.15f, null, parent, path, out bench)) break;
+            }
+            if (bench == null) continue;
+            bench.name = "RouteWeaponTable_" + (station + 1);
+            OnTable(bench, weapons[station, 0], -0.65f);
+            OnTable(bench, weapons[station, 1], 0.65f);
+            Label(bench, "보급 지점  " + (station + 1), new Vector3(0f, 1.35f, 0.5f), 2.8f, 3f);
+            count += 2;
+            count += SupplyNear(PickupType.Ammo, bench.position + right * 2.4f, anchor, radio, parent, path) ? 1 : 0;
+            count += SupplyNear(PickupType.Medkit, bench.position + right * 2.4f - forward, anchor, radio, parent, path) ? 1 : 0;
+            count += SupplyNear(PickupType.Grenade, bench.position + right * 2.4f + forward, anchor, radio, parent, path) ? 1 : 0;
+        }
+        return count;
+    }
+
+    private static bool RoutePoint(CityMapInfo map, float progress, out Vector3 point, out Vector3 forward)
+    {
+        point = Vector3.zero;
+        forward = Vector3.forward;
+        Transform[] route = map.RoutePoints;
+        if (route == null || route.Length < 2) return false;
+        float total = map.RouteLength;
+        if (total < 0.01f) return false;
+        float remaining = total * Mathf.Clamp01(progress);
+        for (int i = 0; i < route.Length - 1; i++)
+        {
+            if (route[i] == null || route[i + 1] == null) continue;
+            Vector3 segment = route[i + 1].position - route[i].position;
+            float length = segment.magnitude;
+            if (length < 0.001f) continue;
+            if (remaining <= length || i == route.Length - 2)
+            {
+                point = Vector3.Lerp(route[i].position, route[i + 1].position, Mathf.Clamp01(remaining / length));
+                forward = Vector3.ProjectOnPlane(segment, Vector3.up).normalized;
+                if (forward.sqrMagnitude < 0.01f) forward = Vector3.forward;
+                return true;
+            }
+            remaining -= length;
+        }
+        return false;
+    }
+
+    private static bool TryBench(Vector3 desired, Vector3 forward, Vector3 approachFrom, float width, float depth,
+        BoxCollider room, Transform parent, NavMeshPath path, out Transform bench)
+    {
+        bench = null;
+        if (!NavMesh.SamplePosition(desired, out NavMeshHit hit, 1.1f, NavMesh.AllAreas)
+            || Mathf.Abs(hit.position.y - desired.y) > 0.7f) return false;
+        Quaternion rotation = Quaternion.LookRotation(forward, Vector3.up);
+        if (room == null && Mathf.Abs(Vector3.Dot(hit.position - approachFrom, rotation * Vector3.right)) < width * 0.5f + 0.75f) return false;
+        Vector3 half = new Vector3(width * 0.5f + 0.08f, 0.5f, depth * 0.5f + 0.08f);
+        if (Physics.CheckBox(hit.position + Vector3.up * 0.56f, half, rotation, WorldMask, QueryTriggerInteraction.Ignore)) return false;
+        for (int corner = 0; corner < 4; corner++)
+        {
+            Vector3 local = new Vector3((corner % 2 == 0 ? -1f : 1f) * width * 0.48f, 0f,
+                (corner < 2 ? -1f : 1f) * depth * 0.48f);
+            Vector3 foot = hit.position + rotation * local;
+            if (room != null)
+            {
+                Bounds bounds = room.bounds;
+                if (foot.x < bounds.min.x + 0.1f || foot.x > bounds.max.x - 0.1f
+                    || foot.z < bounds.min.z + 0.1f || foot.z > bounds.max.z - 0.1f) return false;
+            }
+            if (!Physics.Raycast(foot + Vector3.up * 0.35f, Vector3.down, out RaycastHit ground, 0.75f,
+                WorldMask, QueryTriggerInteraction.Ignore) || Mathf.Abs(ground.point.y - hit.position.y) > 0.16f) return false;
+        }
+        Vector3 front = hit.position - forward * (depth * 0.5f + 0.85f);
+        if (!NavMesh.SamplePosition(front, out NavMeshHit approach, 0.5f, NavMesh.AllAreas)
+            || !Reachable(approachFrom, approach.position, path)) return false;
+        if (Physics.CheckCapsule(approach.position + Vector3.up * 0.35f, approach.position + Vector3.up * 1.5f,
+            0.25f, WorldMask, QueryTriggerInteraction.Ignore)) return false;
+        bench = new GameObject("WeaponTable").transform;
+        bench.SetParent(parent, true);
+        bench.SetPositionAndRotation(hit.position, rotation);
+        BenchPart(bench, "Top", new Vector3(0f, 0.96f, 0f), new Vector3(width, 0.12f, depth), new Color(0.27f, 0.19f, 0.12f));
+        for (int i = 0; i < 4; i++)
+        {
+            BenchPart(bench, "Leg", new Vector3((i % 2 == 0 ? -1f : 1f) * (width * 0.5f - 0.16f), 0.45f,
+                (i < 2 ? -1f : 1f) * (depth * 0.5f - 0.16f)), new Vector3(0.1f, 0.9f, 0.1f), new Color(0.15f, 0.18f, 0.19f));
+        }
+        BoxCollider collider = bench.gameObject.AddComponent<BoxCollider>();
+        collider.center = new Vector3(0f, 0.51f, 0f);
+        collider.size = new Vector3(width, 1.02f, depth);
+        NavMeshObstacle obstacle = bench.gameObject.AddComponent<NavMeshObstacle>();
+        obstacle.shape = NavMeshObstacleShape.Box;
+        obstacle.center = collider.center;
+        obstacle.size = collider.size;
+        obstacle.carving = true;
+        obstacle.carveOnlyStationary = true;
+        obstacle.carvingTimeToStationary = 0f;
+        Physics.SyncTransforms();
+        return true;
+    }
+
+    private static void OnTable(Transform table, WeaponSlot weapon, float x)
+    {
+        Pickup.CreateWeapon(weapon, table.TransformPoint(new Vector3(x, 1.04f, 0f)), table.eulerAngles.y, table);
+        Label(table, "[" + (int)weapon + "] " + PlayerWeapons.DisplayName(weapon), new Vector3(x, 1.05f, -0.46f), 1.1f, 2.2f, true);
+    }
+
+    private static bool SupplyNear(PickupType type, Vector3 desired, Vector3 route, Transform radio, Transform parent, NavMeshPath path)
+    {
+        for (int attempt = 0; attempt < 12; attempt++)
+        {
+            Vector2 jitter = attempt == 0 ? Vector2.zero : Random.insideUnitCircle * 2f;
+            Vector3 candidate = desired + new Vector3(jitter.x, 0f, jitter.y);
+            if (!NavMesh.SamplePosition(candidate, out NavMeshHit hit, 1f, NavMesh.AllAreas)
+                || Mathf.Abs(hit.position.y - desired.y) > 0.7f || !Reachable(route, hit.position, path)) continue;
+            if (radio != null && FlatDistance(hit.position, radio.position) < 4.5f) continue;
+            bool overlaps = false;
+            foreach (Pickup pickup in Pickup.All)
+            {
+                if (pickup != null && Mathf.Abs(pickup.transform.position.y - hit.position.y) < 1.5f
+                    && FlatDistance(pickup.transform.position, hit.position) < 0.8f)
+                {
+                    overlaps = true;
+                    break;
+                }
+            }
+            if (overlaps || Physics.CheckCapsule(hit.position + Vector3.up * 0.35f,
+                hit.position + Vector3.up * 1.2f, 0.3f, WorldMask, QueryTriggerInteraction.Ignore)) continue;
+            Pickup.Create(type, hit.position, Random.Range(0f, 360f), parent);
+            return true;
+        }
+        return false;
+    }
+
+    private static bool Reachable(Vector3 from, Vector3 to, NavMeshPath path)
+    {
+        return NavMesh.SamplePosition(from, out NavMeshHit start, 1f, NavMesh.AllAreas)
+            && NavMesh.CalculatePath(start.position, to, NavMesh.AllAreas, path) && path.status == NavMeshPathStatus.PathComplete;
+    }
+
+    private static float FlatDistance(Vector3 a, Vector3 b)
+    {
+        a.y = b.y = 0f;
+        return Vector3.Distance(a, b);
+    }
+
+    private static void BenchPart(Transform parent, string name, Vector3 position, Vector3 scale, Color color)
+    {
+        GameObject part = GameObject.CreatePrimitive(PrimitiveType.Cube);
+        part.name = name;
+        part.GetComponent<Collider>().enabled = false;
+        Object.Destroy(part.GetComponent<Collider>());
+        part.transform.SetParent(parent, false);
+        part.transform.localPosition = position;
+        part.transform.localScale = scale;
+        part.GetComponent<Renderer>().sharedMaterial = SpecialEffects.GetMaterial(color, 0f);
+    }
+
+    private static void Label(Transform parent, string title, Vector3 position, float width, float size, bool flat = false)
+    {
+        GameObject go = new GameObject("Label", typeof(RectTransform), typeof(TextMeshPro));
+        go.transform.SetParent(parent, false);
+        go.transform.localPosition = position;
+        go.transform.localRotation = Quaternion.Euler(flat ? 90f : 0f, 0f, 0f);
+        TextMeshPro label = go.GetComponent<TextMeshPro>();
+        if (_font == null)
+        {
+            foreach (TextMeshProUGUI text in Object.FindObjectsByType<TextMeshProUGUI>(FindObjectsInactive.Include, FindObjectsSortMode.None))
+            {
+                if (text.font != null && text.font.HasCharacter('무', true, true))
+                {
+                    _font = text.font;
+                    break;
+                }
+            }
+        }
+        if (_font != null) label.font = _font;
+        label.text = title;
+        label.fontSize = size;
+        label.alignment = TextAlignmentOptions.Center;
+        label.color = new Color(0.65f, 0.9f, 1f);
+        label.rectTransform.sizeDelta = new Vector2(width, 0.4f);
+        label.overflowMode = TextOverflowModes.Overflow;
+    }
+}

@@ -49,12 +49,12 @@ public static class L4DV6Installer
         Apply(false);
     }
 
-    [MenuItem("Tools/L4D 맵/v7 1인칭 무기 표시 패치 다시 적용", priority = 15)]
+    [MenuItem("Tools/L4D 맵/v9 동료 AI 패치 다시 적용", priority = 15)]
     public static void Reapply()
     {
         if (EditorApplication.isPlayingOrWillChangePlaymode || EditorApplication.isCompiling)
         {
-            Debug.LogWarning("[L4D v7] Play를 끄고 컴파일이 끝난 뒤 실행하세요.");
+            Debug.LogWarning("[L4D v9] Play를 끄고 컴파일이 끝난 뒤 실행하세요.");
             return;
         }
         Apply(true);
@@ -107,7 +107,7 @@ public static class L4DV6Installer
                 pending.Add(new Pending { Target = target, Bytes = bytes, Original = original, Existed = existed });
             }
 
-            string backup = Path.Combine(projectRoot, "Library", "L4D_V7_Backup", DateTime.UtcNow.ToString("yyyyMMdd_HHmmss_fff"));
+            string backup = Path.Combine(projectRoot, "Library", "L4D_V9_Backup", DateTime.UtcNow.ToString("yyyyMMdd_HHmmss_fff"));
             foreach (Pending item in pending)
             {
                 if (!item.Existed) continue;
@@ -144,11 +144,11 @@ public static class L4DV6Installer
             }
             EditorPrefs.SetString(revisionKey, digest);
             if (pending.Count > 0) AssetDatabase.Refresh();
-            Debug.Log("[L4D v7] 1인칭 무기 표시 패치 적용 완료. 컴파일이 끝나면 기존 씬을 재생하세요. (갱신 " + pending.Count + "개)");
+            Debug.Log("[L4D v9] 동료 AI 패치 적용 완료. 컴파일이 끝나면 기존 씬을 재생하세요. (갱신 " + pending.Count + "개)");
         }
         catch (Exception exception)
         {
-            Debug.LogError("[L4D v7] 적용을 완료하지 못했습니다: " + exception.Message);
+            Debug.LogError("[L4D v9] 적용을 완료하지 못했습니다: " + exception.Message);
         }
     }
 }

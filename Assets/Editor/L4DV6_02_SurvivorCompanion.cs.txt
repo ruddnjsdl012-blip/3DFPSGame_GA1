@@ -1,0 +1,364 @@
+using UnityEngine;
+using UnityEngine.AI;
+
+public enum CompanionState { Follow, Combat, Idle }
+
+[DisallowMultipleComponent]
+[RequireComponent(typeof(NavMeshAgent))]
+public sealed class SurvivorCompanion : MonoBehaviour
+{
+    [Header("거리 유지: 5m부터 추적, 2.8m 이내 정지")]
+    [SerializeField, Min(0.5f)] private float stopDistance = 5f;
+    [SerializeField, Min(0.25f)] private float closeDistance = 2.8f;
+    [SerializeField, Min(0.1f)] private float attackCooldown = 0.35f;
+    [SerializeField, Min(5f)] private float _combatLeash = 12f;
+    private SurvivorSquad _squad;
+    private NavMeshAgent _agent;
+    private SurvivorVisual _visual;
+    private NavMeshPath _path;
+    private Zombie _target;
+    private int _index;
+    private bool _following;
+    private float _nextThink;
+    private float _nextPath;
+    private float _nextAttack;
+    private float _nextWeaponChoice;
+    private float _reloadUntil;
+    private float _stuckAt;
+    private Vector3 _progressPosition;
+    private Vector3 _sidestep;
+    private float _sidestepUntil;
+    private float _nextSidestep;
+    private WeaponSlot _weapon = WeaponSlot.Rifle;
+    private int _rifleRounds = 30;
+    private int _pistolRounds = 6;
+    private int _burstLeft;
+    private readonly RaycastHit[] _shots = new RaycastHit[24];
+    public CompanionState State { get; private set; } = CompanionState.Idle;
+    public Zombie Target => _target;
+    public WeaponSlot Weapon => _weapon;
+
+    public void Configure(SurvivorSquad squad, Animator animator, int index)
+    {
+        _squad = squad;
+        _index = index;
+        _visual = gameObject.AddComponent<SurvivorVisual>();
+        _visual.Configure(animator, index);
+    }
+
+    private void Awake()
+    {
+        _agent = GetComponent<NavMeshAgent>();
+        _agent.updateRotation = false;
+        _path = new NavMeshPath();
+        stopDistance = Mathf.Max(0.75f, stopDistance);
+        closeDistance = Mathf.Clamp(closeDistance, 0.25f, stopDistance - 0.25f);
+        _progressPosition = transform.position;
+        _stuckAt = Time.time;
+        _nextThink = Time.time + _index * 0.04f;
+        _burstLeft = Random.Range(2, 5);
+    }
+
+    public void ReconsiderTarget() { _nextThink = 0f; }
+
+    private void Update()
+    {
+        if (_squad == null || _agent == null) return;
+        if (GameManager.Instance == null || GameManager.Instance.State != GameState.Playing || Time.timeScale <= 0f)
+        {
+            Stop();
+            _visual?.SetMotion(Vector3.zero, null, _weapon, false);
+            return;
+        }
+        float playerDistance = Vector3.Distance(transform.position, _squad.Leader.position);
+        if (Time.time >= _nextThink)
+        {
+            _nextThink = Time.time + 0.16f;
+            RefreshFollow(playerDistance);
+            _target = SelectTarget();
+            State = ResolveState(_target != null, playerDistance);
+            if (_target != null) SelectWeapon(Vector3.Distance(transform.position, _target.transform.position));
+        }
+        if (_target != null && _target.IsDead) { _target = null; ReconsiderTarget(); }
+        bool reloading = _reloadUntil > Time.time;
+        if (_reloadUntil > 0f && !reloading)
+        {
+            if (_weapon == WeaponSlot.Rifle) _rifleRounds = 30;
+            else if (_weapon == WeaponSlot.Revolver) _pistolRounds = 6;
+            _reloadUntil = 0f;
+        }
+        if (!_agent.enabled || !_agent.isOnNavMesh)
+        {
+            BindLocally();
+            return;
+        }
+        _agent.speed = playerDistance > 10f ? 9f : 6.7f;
+        switch (State)
+        {
+            case CompanionState.Follow: Follow(); break;
+            case CompanionState.Combat: Combat(); break;
+            default: Stop(); break;
+        }
+        Turn();
+        RecoverStuck();
+        _visual?.SetMotion(_agent.velocity, State == CompanionState.Combat ? _target : null, _weapon, reloading);
+    }
+
+    private void RefreshFollow(float distance)
+    {
+        if (distance >= stopDistance) _following = true;
+        else if (distance <= closeDistance) _following = false;
+    }
+
+    private CompanionState ResolveState(bool hasTarget, float playerDistance)
+    {
+        if (playerDistance > _combatLeash) return CompanionState.Follow;
+        if (hasTarget) return CompanionState.Combat;
+        return _following ? CompanionState.Follow : CompanionState.Idle;
+    }
+
+    private Zombie SelectTarget()
+    {
+        Zombie priority = _squad.PriorityTarget;
+        if (Eligible(priority)) return priority;
+        Zombie best = null;
+        float bestScore = float.MaxValue;
+        foreach (Zombie enemy in SurvivorSquad.ActiveEnemies)
+        {
+            if (!Eligible(enemy)) continue;
+            float distance = (enemy.transform.position - transform.position).sqrMagnitude;
+            float leaderDistance = (enemy.transform.position - _squad.Leader.position).sqrMagnitude;
+            float variety = ((enemy.GetInstanceID() + _index * 17) & 7) * 0.45f;
+            float score = distance + leaderDistance * 0.35f + variety;
+            if (enemy == _target) score *= 0.8f;
+            if (score >= bestScore || !WorldVisible(enemy)) continue;
+            bestScore = score;
+            best = enemy;
+        }
+        return best;
+    }
+
+    private bool Eligible(Zombie enemy)
+    {
+        return enemy != null && enemy.isActiveAndEnabled && enemy.IsCombatReady && !enemy.IsDead
+            && enemy.gameObject.scene == gameObject.scene
+            && (enemy.transform.position - _squad.Leader.position).sqrMagnitude <= 324f
+            && (enemy.transform.position - transform.position).sqrMagnitude <= 900f;
+    }
+
+    private void SelectWeapon(float distance)
+    {
+        if (_reloadUntil > Time.time) return;
+        bool axeTooFar = _weapon == WeaponSlot.Axe && distance > 3.5f;
+        if (!axeTooFar && Time.time < _nextWeaponChoice) return;
+        _nextWeaponChoice = Time.time + Random.Range(2.2f, 4.2f);
+        WeaponSlot next = ChooseWeapon(distance, Random.value, _index);
+        if (next == _weapon) return;
+        _weapon = next;
+        _nextAttack = Mathf.Max(_nextAttack, Time.time + 0.3f);
+    }
+
+    public static WeaponSlot ChooseWeapon(float distance, float roll, int personality)
+    {
+        float bias = (personality % 3 - 1) * 0.08f;
+        if (distance < 2.1f && roll < 0.7f + bias) return WeaponSlot.Axe;
+        if (distance < 7f) return roll < 0.58f - bias ? WeaponSlot.Revolver : WeaponSlot.Rifle;
+        return roll < (distance > 12f ? 0.13f : 0.35f) + bias ? WeaponSlot.Revolver : WeaponSlot.Rifle;
+    }
+
+    private Vector3 LeaderFloor()
+    {
+        int zombieLayer = LayerMask.NameToLayer("Zombie");
+        if (!ZombieNavigationTarget.TryGet(_squad.Leader, _agent.agentTypeID, _agent.areaMask,
+            zombieLayer >= 0 ? zombieLayer : gameObject.layer, out Vector3 point)) point = _squad.Leader.position;
+        return point;
+    }
+
+    private Vector3 FormationPoint()
+    {
+        float side = _index == 0 ? -1.45f : _index == 1 ? 1.45f : 0f;
+        return LeaderFloor() + _squad.Leader.right * side - _squad.Leader.forward * (_index == 2 ? 2.4f : 1.25f);
+    }
+
+    private void Follow()
+    {
+        if (!_following && Vector3.Distance(transform.position, _squad.Leader.position) <= closeDistance) { Stop(); return; }
+        _agent.stoppingDistance = 0.2f;
+        if (Time.time < _sidestepUntil) { MoveTo(_sidestep); return; }
+        MoveTo(FormationPoint());
+    }
+
+    private void Combat()
+    {
+        if (_target == null) { Stop(); return; }
+        float distance = Vector3.Distance(transform.position, _target.transform.position);
+        if (_following) Follow();
+        else if (_weapon == WeaponSlot.Axe && distance > 1.65f
+            && (_target.transform.position - _squad.Leader.position).sqrMagnitude < 36f)
+        {
+            _agent.stoppingDistance = 1.35f;
+            NavMeshAgent targetAgent = _target.GetComponent<NavMeshAgent>();
+            Vector3 feet = _target.transform.position - Vector3.up * (targetAgent != null ? ZombieNavigationClearance.FootOffset(targetAgent) : 0f);
+            MoveTo(feet);
+        }
+        else if (Time.time < _sidestepUntil) MoveTo(_sidestep);
+        else Stop();
+        TryAttack(distance);
+    }
+
+    private void MoveTo(Vector3 wanted)
+    {
+        if (Time.time < _nextPath) return;
+        _nextPath = Time.time + 0.25f;
+        if (!SurvivorNavigation.Sample(wanted, transform.position, _agent, out Vector3 point, _path))
+        {
+            if (!SurvivorNavigation.Sample(LeaderFloor(), transform.position, _agent, out point, _path)) return;
+        }
+        _agent.isStopped = false;
+        if (!_agent.SetPath(_path)) return;
+    }
+
+    private void Stop()
+    {
+        if (_agent != null && _agent.enabled && _agent.isOnNavMesh && !_agent.isStopped) _agent.isStopped = true;
+    }
+
+    private void Turn()
+    {
+        Vector3 direction = State == CompanionState.Combat && _target != null
+            ? _target.transform.position - transform.position : _agent.velocity;
+        direction.y = 0f;
+        if (direction.sqrMagnitude > 0.01f)
+            transform.rotation = Quaternion.Slerp(transform.rotation, Quaternion.LookRotation(direction), Time.deltaTime * 9f);
+    }
+
+    private Vector3 AimPoint(Zombie enemy)
+    {
+        CapsuleCollider body = enemy.GetComponent<CapsuleCollider>();
+        return body != null ? body.bounds.center : enemy.transform.position + Vector3.up * 1.05f * enemy.transform.lossyScale.y;
+    }
+
+    private bool ClearTarget(Zombie enemy)
+    {
+        Vector3 from = transform.position + Vector3.up * 1.35f;
+        Vector3 to = AimPoint(enemy);
+        if (_squad.FriendlyBlocks(from, to, this)) return false;
+        if (Physics.Linecast(from, to, out RaycastHit hit, ~0, QueryTriggerInteraction.Ignore))
+            return hit.collider.GetComponentInParent<Zombie>() == enemy;
+        return true;
+    }
+
+    private bool WorldVisible(Zombie enemy)
+    {
+        Vector3 from = transform.position + Vector3.up * 1.35f;
+        if (Physics.Linecast(from, AimPoint(enemy), out RaycastHit hit, SurvivorNavigation.WorldMask(), QueryTriggerInteraction.Ignore))
+            return hit.collider.GetComponentInParent<Zombie>() != null;
+        return true;
+    }
+
+    private void TryAttack(float distance)
+    {
+        if (_target == null || _target.IsDead || Time.time < _nextAttack || _reloadUntil > Time.time) return;
+        if (_weapon == WeaponSlot.Axe)
+        {
+            if (distance > 2f || !ClearTarget(_target)) return;
+            _nextAttack = Time.time + Mathf.Max(attackCooldown, 0.85f);
+            _visual.Attack();
+            SpecialZombie special = _target.GetComponent<SpecialZombie>();
+            float damage = special != null && special.Type == SpecialType.Tank ? 25f : 55f;
+            Vector3 point = AimPoint(_target);
+            SurvivorSquad.DealAllyDamage(_target, new DamageInfo { Value = damage, HitPoint = point,
+                HitNormal = -transform.forward, Direction = transform.forward });
+            GameSounds.PlayAt("axe_swing", transform.position, 0.45f, 0.1f, 25f);
+            return;
+        }
+        if (distance > (_weapon == WeaponSlot.Rifle ? 30f : 20f)) return;
+        if (!ClearTarget(_target)) { RequestSidestep(); return; }
+        int rounds = _weapon == WeaponSlot.Rifle ? _rifleRounds : _pistolRounds;
+        if (rounds <= 0)
+        {
+            _reloadUntil = Time.time + (_weapon == WeaponSlot.Rifle ? 2.4f : 1.7f);
+            GameSounds.PlayAt("reload_mag_out", transform.position, 0.25f, 0.1f, 12f);
+            return;
+        }
+        _nextAttack = Time.time + Mathf.Max(attackCooldown, _weapon == WeaponSlot.Rifle ? 0.18f : 0.65f);
+        if (_weapon == WeaponSlot.Rifle)
+        {
+            _rifleRounds--;
+            if (--_burstLeft <= 0) { _nextAttack += Random.Range(0.35f, 0.7f); _burstLeft = Random.Range(2, 5); }
+        }
+        else _pistolRounds--;
+        Fire();
+    }
+
+    private void Fire()
+    {
+        Vector3 origin = _visual.Muzzle;
+        Vector3 aim = AimPoint(_target) + Random.insideUnitSphere * 0.12f;
+        Vector3 direction = (aim - origin).normalized;
+        float range = _weapon == WeaponSlot.Rifle ? 30f : 20f;
+        if (_squad.FriendlyBlocks(origin, aim, this)) return;
+        int count = Physics.RaycastNonAlloc(origin, direction, _shots, range, ~0, QueryTriggerInteraction.Ignore);
+        RaycastHit nearest = default;
+        float best = range;
+        for (int i = 0; i < count; i++)
+        {
+            RaycastHit hit = _shots[i];
+            if (hit.collider == null || hit.transform.IsChildOf(transform) || hit.distance >= best) continue;
+            nearest = hit; best = hit.distance;
+        }
+        Vector3 end = nearest.collider != null ? nearest.point : origin + direction * range;
+        if (count == _shots.Length) return; // 밀집한 충돌체에서 뒤쪽을 잘못 관통시키지 않는다.
+        if (nearest.collider != null)
+        {
+            Zombie enemy = nearest.collider.GetComponentInParent<Zombie>();
+            if (enemy != null && !enemy.IsDead)
+            {
+                SurvivorSquad.DealAllyDamage(enemy, new DamageInfo { Value = _weapon == WeaponSlot.Rifle ? 7f : 16f,
+                    HitPoint = nearest.point, HitNormal = nearest.normal, Direction = direction });
+            }
+        }
+        _visual.Shot(end);
+        GameSounds.PlayAt(_weapon == WeaponSlot.Rifle ? "gun_shot" : "revolver_shot", origin, 0.42f, 0.06f, 45f);
+    }
+
+    private void RequestSidestep(bool force = false)
+    {
+        if ((!force && _following) || Time.time < _nextSidestep) return;
+        _nextSidestep = Time.time + 1.4f;
+        Vector3 wanted = transform.position + transform.right * (_index % 2 == 0 ? -1.4f : 1.4f);
+        if (!SurvivorNavigation.Sample(wanted, transform.position, _agent, out _sidestep, _path)) return;
+        _sidestepUntil = Time.time + 0.8f;
+        _nextPath = 0f;
+    }
+
+    private void BindLocally()
+    {
+        if (Time.time < _nextPath) return;
+        _nextPath = Time.time + 0.5f;
+        if (NavMesh.SamplePosition(transform.position, out NavMeshHit hit, 0.75f, _agent.areaMask)
+            && Mathf.Abs(hit.position.y - transform.position.y) < 0.6f && SurvivorNavigation.Free(hit.position)
+            && !Physics.Linecast(transform.position + Vector3.up, hit.position + Vector3.up,
+                SurvivorNavigation.WorldMask(), QueryTriggerInteraction.Ignore))
+        {
+            _agent.enabled = true;
+            _agent.Warp(hit.position);
+        }
+    }
+
+    private void RecoverStuck()
+    {
+        if (_agent.isStopped || (_agent.hasPath && _agent.remainingDistance < 0.5f)) { _stuckAt = Time.time; return; }
+        if ((transform.position - _progressPosition).sqrMagnitude > 0.2f)
+        {
+            _progressPosition = transform.position; _stuckAt = Time.time; return;
+        }
+        if (Time.time - _stuckAt < 2f) return;
+        _stuckAt = Time.time;
+        _agent.avoidancePriority = Random.Range(25, 65);
+        _agent.ResetPath();
+        _nextSidestep = 0f;
+        RequestSidestep(true);
+        _nextPath = 0f;
+    }
+}

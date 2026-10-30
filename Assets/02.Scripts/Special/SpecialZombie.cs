@@ -21,7 +21,12 @@ public class SpecialZombie : MonoBehaviour
     private Transform _player;
     private float _abilityTimer;
     private float _pauseTimer;
-    private float _stepTimer;
+    private Vector3 _lastTankPosition;
+    private float _tankStepDistance;
+    private bool _tankStepTracked;
+    [SerializeField, Range(0f, 2f)] private float _tankStepShake = 0.75f;
+    [SerializeField, Min(1f)] private float _tankStepShakeRange = 28f;
+    [SerializeField, Min(0.5f)] private float _tankStride = 2.5f;
     private float _soundTimer;
 
     public SpecialType Type => _type;
@@ -230,23 +235,48 @@ public class SpecialZombie : MonoBehaviour
             _animator.speed = _zombie.State == ZombieState.Attack ? 1.7f : 0.9f;
         }
 
-        // 쿵쿵 걷는 소리와 땅 울림
-        if (_agent.velocity.sqrMagnitude > 1f)
-        {
-            _stepTimer -= dt;
-            if (_stepTimer <= 0f)
-            {
-                _stepTimer = 0.55f;
-                GameSounds.PlayAt("tank_step", transform.position, 1f, 0.2f, 60f);
-                CameraShake.ShakeAt(transform.position, 0.22f, 22f);
-            }
-        }
+        UpdateTankSteps();
 
         DirectorHUD hud = DirectorHUD.Instance;
         if (hud != null)
         {
             hud.SetBoss("탱크", _zombie.Health / _zombie.MaxHealth);
         }
+    }
+
+    private void UpdateTankSteps()
+    {
+        Vector3 position = transform.position;
+        if (!_tankStepTracked)
+        {
+            _lastTankPosition = position;
+            _tankStepTracked = true;
+            return;
+        }
+        Vector3 delta = position - _lastTankPosition;
+        _lastTankPosition = position;
+        delta.y = 0f;
+        if (_agent == null || !_agent.enabled || !_agent.isOnNavMesh || _agent.isStopped
+            || _zombie.State != ZombieState.Trace || _agent.velocity.sqrMagnitude < 1f || delta.sqrMagnitude > 9f)
+        {
+            _tankStepDistance = 0f;
+            return;
+        }
+        _tankStepDistance += delta.magnitude;
+        if (_tankStepDistance < _tankStride) return;
+        _tankStepDistance %= _tankStride;
+        GameSounds.PlayAt("tank_step", position, 1f, 0.15f, 60f);
+        if (_player == null) return;
+        float distance = Vector3.Distance(position, _player.position);
+        float strength = TankStepStrength(distance);
+        if (strength > 0.01f) CameraShake.ShakeMain(strength);
+    }
+
+    private float TankStepStrength(float distance)
+    {
+        if (distance >= _tankStepShakeRange) return 0f;
+        float near = 1f - Mathf.Clamp01(distance / _tankStepShakeRange);
+        return _tankStepShake * near * near;
     }
 
     // 탱크에게 맞으면 크게 날아가고 화면이 흔들린다.

@@ -1,5 +1,5 @@
 {
-  "revision": "L4D-first-person-visibility-v7",
+  "revision": "L4D-companion-squad-v9",
   "files": [
     {
       "target": "Assets/02.Scripts/Audio/GameSounds.cs",
@@ -12,148 +12,173 @@
       "sha256": "e336bdb427de4aab8b0942efd5ec303bf74be337c07200fadf5be41f36d6ab0e"
     },
     {
+      "target": "Assets/02.Scripts/Companion/SurvivorCompanion.cs",
+      "payload": "L4DV6_02_SurvivorCompanion.cs.txt",
+      "sha256": "3c31e3907153efb7babd5e8f2d94b284ed5a7baccb1e24af665fffcc81e342b9"
+    },
+    {
+      "target": "Assets/02.Scripts/Companion/SurvivorNavigation.cs",
+      "payload": "L4DV6_03_SurvivorNavigation.cs.txt",
+      "sha256": "fce1bb42bd9c8ffdfe7705a591297274d7ede4049accea00f6866df4a83b9f61"
+    },
+    {
+      "target": "Assets/02.Scripts/Companion/SurvivorSquad.cs",
+      "payload": "L4DV6_04_SurvivorSquad.cs.txt",
+      "sha256": "993dac041d420359fc70cc11aaae6a16cb4b6e7a950f2fe5f4a7fd9c221eee2d"
+    },
+    {
+      "target": "Assets/02.Scripts/Companion/SurvivorVisual.cs",
+      "payload": "L4DV6_05_SurvivorVisual.cs.txt",
+      "sha256": "a97f25a21df81af19027093ebef609b71b2d19265dbe4aee76230fc55ced398b"
+    },
+    {
       "target": "Assets/02.Scripts/Director/AIDirector.cs",
-      "payload": "L4DV6_02_AIDirector.cs.txt",
+      "payload": "L4DV6_06_AIDirector.cs.txt",
       "sha256": "3648caef009bd9b4009ef9f7d9e1f0430dad61404d377c09def24b6bb509f2c1"
     },
     {
       "target": "Assets/02.Scripts/Map/CityMapAtmosphere.cs",
-      "payload": "L4DV6_03_CityMapAtmosphere.cs.txt",
+      "payload": "L4DV6_07_CityMapAtmosphere.cs.txt",
       "sha256": "8b34d4c19536a87b49f0c4488657f1a11c272beaabf1f215743128a1d336c59f"
     },
     {
       "target": "Assets/02.Scripts/Map/CityMapInfo.cs",
-      "payload": "L4DV6_04_CityMapInfo.cs.txt",
+      "payload": "L4DV6_08_CityMapInfo.cs.txt",
       "sha256": "0770bd98ba61a56308ceb02d9fb1344e95585259f541c6a9063704eb1e18b1ab"
     },
     {
       "target": "Assets/02.Scripts/Map/CityMapNavigation.cs",
-      "payload": "L4DV6_05_CityMapNavigation.cs.txt",
+      "payload": "L4DV6_09_CityMapNavigation.cs.txt",
       "sha256": "01f9d3720af4419468af6c76a73b8e5db704095e15e03051176640f4d38dee74"
     },
     {
       "target": "Assets/02.Scripts/Monster/Zombie.cs",
-      "payload": "L4DV6_06_Zombie.cs.txt",
-      "sha256": "422d3c0b7161c7784e5409c14aa4e8a08130c0fb528fb3fadf047773955c7ad3"
+      "payload": "L4DV6_10_Zombie.cs.txt",
+      "sha256": "800d022e78349127103f464d31dc8647861572a1e70fe7e864a0eb0dbd60fc16"
     },
     {
       "target": "Assets/02.Scripts/Monster/ZombieHealthBar.cs",
-      "payload": "L4DV6_07_ZombieHealthBar.cs.txt",
+      "payload": "L4DV6_11_ZombieHealthBar.cs.txt",
       "sha256": "76561b7d85cb9b1d4bcb7e2c55d783ac992d49a7b9dc5f1a450c71f145aae7b9"
     },
     {
       "target": "Assets/02.Scripts/Monster/ZombieModelLock.cs",
-      "payload": "L4DV6_08_ZombieModelLock.cs.txt",
+      "payload": "L4DV6_12_ZombieModelLock.cs.txt",
       "sha256": "def07b0ffbd864e88204a4fae686c740e6eba73198ef477415ab22b29d4d658e"
     },
     {
       "target": "Assets/02.Scripts/Monster/ZombieNavigationClearance.cs",
-      "payload": "L4DV6_09_ZombieNavigationClearance.cs.txt",
+      "payload": "L4DV6_13_ZombieNavigationClearance.cs.txt",
       "sha256": "045b29b00a430dcb9c436335d51e7954ebfcc5b973990e4ba3884b429bfdcacc"
     },
     {
       "target": "Assets/02.Scripts/Monster/ZombieNavigationTarget.cs",
-      "payload": "L4DV6_10_ZombieNavigationTarget.cs.txt",
+      "payload": "L4DV6_14_ZombieNavigationTarget.cs.txt",
       "sha256": "1bdb5eb1969313d07a03dc58eff8f59b546b987d5eac699db12305b91c6eaa4a"
     },
     {
       "target": "Assets/02.Scripts/Monster/ZombieUnstuck.cs",
-      "payload": "L4DV6_11_ZombieUnstuck.cs.txt",
+      "payload": "L4DV6_15_ZombieUnstuck.cs.txt",
       "sha256": "e6fd789331e4c89bd6e617da614f7694625f42033f02a0503e74bc3ab0c93381"
     },
     {
       "target": "Assets/02.Scripts/Player/FirstPersonBodyView.cs",
-      "payload": "L4DV6_12_FirstPersonBodyView.cs.txt",
+      "payload": "L4DV6_16_FirstPersonBodyView.cs.txt",
       "sha256": "485e7272d4a80f1263db467f563c2cc058e474446d9237a0662d8eae476039a4"
     },
     {
       "target": "Assets/02.Scripts/Player/GrenadeArmView.cs",
-      "payload": "L4DV6_13_GrenadeArmView.cs.txt",
+      "payload": "L4DV6_17_GrenadeArmView.cs.txt",
       "sha256": "e07ff478d37130f16d3f7c6cd193918b07194d7b3bbd656ad63b903225e6e699"
     },
     {
       "target": "Assets/02.Scripts/Player/PlayerBombFire.cs",
-      "payload": "L4DV6_14_PlayerBombFire.cs.txt",
+      "payload": "L4DV6_18_PlayerBombFire.cs.txt",
       "sha256": "7d1daadfd49559f3afda19fb3d7c148ce1626ef38c3ec682c21c8b0417fe074a"
     },
     {
       "target": "Assets/02.Scripts/Player/PlayerGrenade.cs",
-      "payload": "L4DV6_15_PlayerGrenade.cs.txt",
+      "payload": "L4DV6_19_PlayerGrenade.cs.txt",
       "sha256": "cc84176f472683e0ab285f43478415d497b9e368ffff9cc8b4a94103aace0313"
     },
     {
       "target": "Assets/02.Scripts/Player/PlayerGunFire.cs",
-      "payload": "L4DV6_16_PlayerGunFire.cs.txt",
+      "payload": "L4DV6_20_PlayerGunFire.cs.txt",
       "sha256": "bf687d4508ffe9e7ba26bc6db8eb669b50b79e500d365b7381b5b7caed35ea7b"
     },
     {
       "target": "Assets/02.Scripts/Player/PlayerInventory.cs",
-      "payload": "L4DV6_17_PlayerInventory.cs.txt",
+      "payload": "L4DV6_21_PlayerInventory.cs.txt",
       "sha256": "b1b663f0ce14133890d50b1b8a50e3bf6bd029999e59ca915ccd403d0e8b7319"
     },
     {
       "target": "Assets/02.Scripts/Player/PlayerShove.cs",
-      "payload": "L4DV6_18_PlayerShove.cs.txt",
+      "payload": "L4DV6_22_PlayerShove.cs.txt",
       "sha256": "82794a94f89ca497634c0cd548163e0901a10c59c6e9616129fd4b7d3c013dff"
     },
     {
+      "target": "Assets/02.Scripts/Player/ScreenBloodSplatter.cs",
+      "payload": "L4DV6_23_ScreenBloodSplatter.cs.txt",
+      "sha256": "51ac19f2b96e016911480d80eba10f238528fd44d54772f319d181ffc06ef248"
+    },
+    {
       "target": "Assets/02.Scripts/Special/SpecialZombie.cs",
-      "payload": "L4DV6_19_SpecialZombie.cs.txt",
-      "sha256": "a9901789cec1667dadfb6eef2b0d886a6d5ba42e55eeaac759a29a394af1b635"
+      "payload": "L4DV6_24_SpecialZombie.cs.txt",
+      "sha256": "161c0a1eb070695dfb4a9d3be1ab22f530e8987aecde3dfb14449798e20788cc"
     },
     {
       "target": "Assets/02.Scripts/Supply/Pickup.cs",
-      "payload": "L4DV6_20_Pickup.cs.txt",
+      "payload": "L4DV6_25_Pickup.cs.txt",
       "sha256": "69c3a417060e16fa6dd2b89fe6898ecda60c6dd5cdc54d70df2222019256730f"
     },
     {
       "target": "Assets/02.Scripts/Supply/SupplySpawner.cs",
-      "payload": "L4DV6_21_SupplySpawner.cs.txt",
+      "payload": "L4DV6_26_SupplySpawner.cs.txt",
       "sha256": "5b4213d3ac7f301657ced2d32fee409e02125f1d858ee2e530463ae181a1a5b8"
     },
     {
       "target": "Assets/02.Scripts/Supply/WeaponSupplyStations.cs",
-      "payload": "L4DV6_22_WeaponSupplyStations.cs.txt",
+      "payload": "L4DV6_27_WeaponSupplyStations.cs.txt",
       "sha256": "5d7db7b8d4c0276d8f1b36313ed30b7d8055cffce5ddf9bbb0b3b43c7118077b"
     },
     {
       "target": "Assets/02.Scripts/Weapon/FirstPersonWeaponCamera.cs",
-      "payload": "L4DV6_23_FirstPersonWeaponCamera.cs.txt",
+      "payload": "L4DV6_28_FirstPersonWeaponCamera.cs.txt",
       "sha256": "04ddb8d37379444c18e4bd561abe4e189281d6be6c5a545403756ac82ba8f584"
     },
     {
       "target": "Assets/02.Scripts/Weapon/PlayerAxe.cs",
-      "payload": "L4DV6_24_PlayerAxe.cs.txt",
+      "payload": "L4DV6_29_PlayerAxe.cs.txt",
       "sha256": "1ff3f0dad8199aa102ab88edaff2d4090f0438ac5dd7fdfbd5e64af005bb04a6"
     },
     {
       "target": "Assets/02.Scripts/Weapon/PlayerExtraGun.cs",
-      "payload": "L4DV6_25_PlayerExtraGun.cs.txt",
+      "payload": "L4DV6_30_PlayerExtraGun.cs.txt",
       "sha256": "0ca1c9477fc84b4fe004eee77cf35214c61f15396808f0f1669ab992ca0a8db3"
     },
     {
       "target": "Assets/02.Scripts/Weapon/PlayerRevolver.cs",
-      "payload": "L4DV6_26_PlayerRevolver.cs.txt",
+      "payload": "L4DV6_31_PlayerRevolver.cs.txt",
       "sha256": "c38492dfc752723432c0d05cc09dd0c85203a50427ac7b580911ef37cddb70f8"
     },
     {
       "target": "Assets/02.Scripts/Weapon/PlayerRifleView.cs",
-      "payload": "L4DV6_27_PlayerRifleView.cs.txt",
+      "payload": "L4DV6_32_PlayerRifleView.cs.txt",
       "sha256": "6386d00dcd83d9c128030057f5de6910d0bb8df1c3d1fc1facfcf37f7e1eda82"
     },
     {
       "target": "Assets/02.Scripts/Weapon/PlayerWeapons.cs",
-      "payload": "L4DV6_28_PlayerWeapons.cs.txt",
-      "sha256": "85a3142d3cce93ef7f6579fea87bd272fc6501ab0a83a02214e0d2ffdd16d527"
+      "payload": "L4DV6_33_PlayerWeapons.cs.txt",
+      "sha256": "d37dcb53bb6af0f8caa5db869750962e3d48269b58dff1071540754b63df6e56"
     },
     {
       "target": "Assets/02.Scripts/Weapon/WeaponArmView.cs",
-      "payload": "L4DV6_29_WeaponArmView.cs.txt",
+      "payload": "L4DV6_34_WeaponArmView.cs.txt",
       "sha256": "0f3e8b1cc3204de04977e36afc82d33325a615a1c2370e913b9f07e0ac76b311"
     },
     {
       "target": "Assets/02.Scripts/Weapon/WeaponModels.cs",
-      "payload": "L4DV6_30_WeaponModels.cs.txt",
+      "payload": "L4DV6_35_WeaponModels.cs.txt",
       "sha256": "44597f57468aef5cdb16a8a10d01c6cdce92c60bac0d88c4dcecaa68d7e2d8ed"
     }
   ]
