@@ -1,0 +1,175 @@
+using System.Collections;
+using UnityEngine;
+
+public class PlayerExtraGun : MonoBehaviour
+{
+    private sealed class Gun
+    {
+        public int Capacity;
+        public int Rounds;
+        public int Reserve;
+        public int MaxReserve;
+        public float Interval;
+        public float ReloadTime;
+        public float Damage;
+        public float Range;
+        public float Kick;
+        public Gun(int capacity, int reserve, int maxReserve, float interval, float reload, float damage, float range, float kick)
+        {
+            Capacity = Rounds = capacity;
+            Reserve = reserve;
+            MaxReserve = maxReserve;
+            Interval = interval;
+            ReloadTime = reload;
+            Damage = damage;
+            Range = range;
+            Kick = kick;
+        }
+    }
+    private Gun _smg;
+    private Gun _shotgun;
+    private PlayerWeapons _weapons;
+    private PlayerInventory _inventory;
+    private PlayerShove _shove;
+    private PlayerGunFire _rifle;
+    private GunFeedback _feedback;
+    private WeaponArmView _view;
+    private Transform _smgModel;
+    private Transform _shotgunModel;
+    private Transform _smgMuzzle;
+    private Transform _shotgunMuzzle;
+    private Coroutine _reload;
+    private float _nextFire;
+    private float _kick;
+    private float _reloadBlend;
+    public bool IsReloading => _reload != null;
+
+    private void Awake()
+    {
+        _smg = new Gun(32, 96, 192, 0.075f, 2.1f, 8f, 70f, 0.65f);
+        _shotgun = new Gun(8, 32, 64, 0.8f, 2.8f, 7f, 40f, 2.3f);
+    }
+    private Gun GetGun(WeaponSlot slot) => slot == WeaponSlot.Smg ? _smg : slot == WeaponSlot.Shotgun ? _shotgun : null;
+    public int Rounds(WeaponSlot slot) => GetGun(slot) != null ? GetGun(slot).Rounds : 0;
+    public int Reserve(WeaponSlot slot) => GetGun(slot) != null ? GetGun(slot).Reserve : 0;
+    public int ClipSize(WeaponSlot slot) => GetGun(slot) != null ? GetGun(slot).Capacity : 0;
+    public bool CanAddAmmo(WeaponSlot slot) => GetGun(slot) != null && GetGun(slot).Reserve < GetGun(slot).MaxReserve;
+
+    public int AddAmmo(WeaponSlot slot, int amount)
+    {
+        Gun gun = GetGun(slot);
+        if (gun == null) return 0;
+        int added = Mathf.Clamp(amount, 0, gun.MaxReserve - gun.Reserve);
+        gun.Reserve += added;
+        return added;
+    }
+
+    private void Start()
+    {
+        _weapons = GetComponent<PlayerWeapons>();
+        _inventory = GetComponent<PlayerInventory>();
+        _shove = GetComponent<PlayerShove>();
+        _rifle = GetComponent<PlayerGunFire>();
+        _feedback = GetComponent<GunFeedback>();
+        Transform items = new GameObject("ExtraGunItems").transform;
+        _smgModel = WeaponModels.Create("SMG");
+        _smgModel.SetParent(items, false);
+        _shotgunModel = WeaponModels.Create("Shotgun");
+        _shotgunModel.SetParent(items, false);
+        _smgMuzzle = WeaponModels.Find(_smgModel, "Muzzle");
+        _shotgunMuzzle = WeaponModels.Find(_shotgunModel, "Muzzle");
+        _view = WeaponArmView.Create(gameObject, items);
+    }
+
+    private void Update()
+    {
+        UpdateView();
+        if (_weapons == null || GameManager.Instance == null || GameManager.Instance.State != GameState.Playing || Cursor.visible) return;
+        WeaponSlot slot = _weapons.Current;
+        Gun gun = GetGun(slot);
+        if (gun == null || !_weapons.IsReady(slot) || (_inventory != null && _inventory.IsHealing)) return;
+        bool shooting = slot == WeaponSlot.Smg ? Input.GetButton("Fire1") : Input.GetButtonDown("Fire1");
+        if ((_shove == null || !_shove.IsActive) && shooting && _reload == null && Time.time >= _nextFire)
+        {
+            if (gun.Rounds > 0)
+            {
+                Fire(slot, gun);
+            }
+            else if (Input.GetButtonDown("Fire1"))
+            {
+                GameSounds.Play2D("gun_empty", 0.7f);
+                if (gun.Reserve > 0) _reload = StartCoroutine(Reload(gun));
+            }
+        }
+        if (Input.GetKeyDown(KeyCode.R) && _reload == null && gun.Rounds < gun.Capacity && gun.Reserve > 0)
+        {
+            _reload = StartCoroutine(Reload(gun));
+        }
+    }
+
+    private void Fire(WeaponSlot slot, Gun gun)
+    {
+        Camera camera = Camera.main;
+        if (camera == null) return;
+        gun.Rounds--;
+        _nextFire = Time.time + gun.Interval;
+        _kick = 1f;
+        Transform view = camera.transform;
+        if (slot == WeaponSlot.Smg)
+        {
+            Vector3 direction = _feedback != null ? _feedback.SpreadDirection(view) : view.forward;
+            BulletHit.Fire(new Ray(view.position, direction), gun.Range, gun.Damage, 2.5f, _rifle != null ? _rifle.HitEffectPrefab : null);
+        }
+        else
+        {
+            for (int i = 0; i < 8; i++)
+            {
+                Vector2 spread = Random.insideUnitCircle * 4.5f;
+                Vector3 direction = view.rotation * Quaternion.Euler(spread.y, spread.x, 0f) * Vector3.forward;
+                BulletHit.Fire(new Ray(view.position, direction), gun.Range, gun.Damage, 1.4f, _rifle != null ? _rifle.HitEffectPrefab : null);
+            }
+        }
+        if (_feedback != null)
+        {
+            _feedback.OnShot(gun.Kick, slot == WeaponSlot.Smg ? "gun_shot" : "revolver_shot", 0.8f,
+                slot == WeaponSlot.Smg ? _smgMuzzle : _shotgunMuzzle);
+        }
+    }
+
+    private IEnumerator Reload(Gun gun)
+    {
+        GameSounds.Play2D("reload_mag_out", 0.65f);
+        yield return new WaitForSeconds(gun.ReloadTime * 0.6f);
+        GameSounds.Play2D("reload_mag_in", 0.7f);
+        yield return new WaitForSeconds(gun.ReloadTime * 0.4f);
+        int take = Mathf.Min(gun.Capacity - gun.Rounds, gun.Reserve);
+        gun.Rounds += take;
+        gun.Reserve -= take;
+        GameSounds.Play2D("reload_bolt_release", 0.7f);
+        _reload = null;
+    }
+
+    public void CancelReload()
+    {
+        if (_reload == null) return;
+        StopCoroutine(_reload);
+        _reload = null;
+    }
+
+    private void UpdateView()
+    {
+        if (_view == null || _weapons == null) return;
+        WeaponSlot slot = _weapons.Current;
+        bool showing = GetGun(slot) != null && _weapons.HasWeapon(slot);
+        _view.Visible = showing;
+        _view.Raise = showing ? _weapons.Raise(slot) : 0f;
+        _smgModel.gameObject.SetActive(slot == WeaponSlot.Smg);
+        _shotgunModel.gameObject.SetActive(slot == WeaponSlot.Shotgun);
+        _kick = Mathf.MoveTowards(_kick, 0f, Time.deltaTime * 5f);
+        _reloadBlend = Mathf.MoveTowards(_reloadBlend, IsReloading ? 1f : 0f, Time.deltaTime * 5f);
+        float reload = Mathf.SmoothStep(0f, 1f, _reloadBlend);
+        _view.HandTarget = new Vector3(0.17f, -0.2f, 0.38f) + new Vector3(-0.03f, -0.04f, -0.07f) * _kick
+            + new Vector3(-0.04f, -0.08f, -0.06f) * reload;
+        _view.ItemRotation = Quaternion.Euler(-14f * _kick + 20f * reload, -2f, 35f * reload);
+    }
+}

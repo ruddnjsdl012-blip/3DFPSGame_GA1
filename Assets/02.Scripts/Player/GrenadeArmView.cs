@@ -37,11 +37,12 @@ public class GrenadeArmView : MonoBehaviour
     private Transform _lower;
     private Transform _hand;
     private Transform _finger;
-    private Renderer[] _renderers;
+    private Renderer[] _renderers = new Renderer[0];
     private Transform _grenadeVisual;
     private bool _built;
     private bool _visible;
     private PlayerShove _shove;
+    private Vector3 _target;
 
     private Animator _bodyAnimator;  // 그림자를 만드는 3인칭 몸
 
@@ -56,8 +57,7 @@ public class GrenadeArmView : MonoBehaviour
     {
         _body = GetComponent<FirstPersonBodyView>();
         _shove = GetComponent<PlayerShove>();
-        Camera camera = Camera.main;
-        _camera = camera != null ? camera.transform : null;
+        ResolveCamera();
         _bodyAnimator = GetComponentInChildren<Animator>();
         if (_bodyAnimator != null)
         {
@@ -65,34 +65,40 @@ public class GrenadeArmView : MonoBehaviour
             _bodyAnimator.cullingMode = AnimatorCullingMode.AlwaysAnimate;
         }
 
-        // 카메라 바로 앞의 손이 잘려 보이지 않게 (FPS 게임은 보통 0.01~0.05)
-        if (camera != null && camera.nearClipPlane > 0.05f)
+    }
+
+    private void ResolveCamera()
+    {
+        if (_camera != null) return;
+        Camera camera = Camera.main;
+        if (camera == null) return;
+        _camera = camera.transform;
+        if (camera.nearClipPlane > 0.05f)
         {
             camera.nearClipPlane = 0.05f;
         }
+        _grenadeVisual = GrenadeModel.Create(_grenadeHeight).transform;
+        _grenadeVisual.name = "GrenadeInHand";
+        _grenadeVisual.SetParent(_camera, false);
+        foreach (Renderer renderer in _grenadeVisual.GetComponentsInChildren<Renderer>(true))
+            renderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+        _grenadeVisual.gameObject.SetActive(false);
+        FirstPersonWeaponCamera.Register(_grenadeVisual);
     }
 
     private void LateUpdate()
     {
+        ResolveCamera();
         if (_grenade == null || _camera == null)
         {
             return;
         }
 
         // 1인칭 모델이 눈 위치에 맞춰진 뒤에 복제한다.
-        if (!_built)
+        if (_body == null) _body = GetComponent<FirstPersonBodyView>();
+        if (!_built && _body != null && _body.IsCalibrated)
         {
-            if (_body == null || !_body.IsCalibrated)
-            {
-                return;
-            }
-
             Build();
-            if (!_built)
-            {
-                enabled = false;
-                return;
-            }
         }
 
         float blend = _grenade.EquipBlend;
@@ -109,6 +115,7 @@ public class GrenadeArmView : MonoBehaviour
         local += new Vector3(0.05f, -0.35f, -0.05f) * rise;
         local += new Vector3(-0.12f, 0.06f, 0.25f) * (_shove != null ? _shove.ViewAmount : 0f);
         Vector3 target = _camera.TransformPoint(local);
+        _target = target;
         Vector3 hint = _camera.TransformPoint(_elbowHint);
 
         // 그림자 몸의 오른팔도 같은 자리로 (조금만 섞는다)
@@ -118,8 +125,11 @@ public class GrenadeArmView : MonoBehaviour
                 _bodyAnimator.GetBoneTransform(HumanBodyBones.RightHand), target, hint, blend);
         }
 
-        _arm.localPosition = _body.NeutralLocalPosition + _offset;
-        _arm.localRotation = Quaternion.identity;
+        if (_arm != null && _body != null)
+        {
+            _arm.localPosition = _body.NeutralLocalPosition + _offset;
+            _arm.localRotation = Quaternion.identity;
+        }
         if (_animator != null)
         {
             _animator.SetFloat("MoveMotion", 0f);
@@ -196,12 +206,17 @@ public class GrenadeArmView : MonoBehaviour
             _grenadeVisual.gameObject.SetActive(show);
         }
 
-        if (!show || _hand == null)
+        if (!show)
         {
             return;
         }
 
-        Vector3 palm = _finger != null ? Vector3.Lerp(_hand.position, _finger.position, 0.7f) : _hand.position + _camera.forward * 0.05f;
+        Vector3 palm = _target;
+        if (_hand != null && _renderers.Length > 0)
+        {
+            Vector3 solved = _finger != null ? Vector3.Lerp(_hand.position, _finger.position, 0.7f) : _hand.position + _camera.forward * 0.05f;
+            if ((solved - _target).sqrMagnitude < 0.0225f) palm = solved;
+        }
         _grenadeVisual.rotation = _camera.rotation * Quaternion.Euler(_grenadeTilt);
         // 수류탄 몸통 가운데(높이의 40%)가 손바닥에 오게
         _grenadeVisual.position = palm - _grenadeVisual.up * (_grenadeHeight * 0.4f) + _camera.up * 0.01f;
@@ -237,7 +252,6 @@ public class GrenadeArmView : MonoBehaviour
         Transform source = _body.ViewRoot;
         if (source == null)
         {
-            _built = false;
             return;
         }
 
@@ -252,7 +266,7 @@ public class GrenadeArmView : MonoBehaviour
         {
             Debug.LogWarning("[GrenadeArmView] 1인칭 모델이 Humanoid가 아니라 오른팔을 만들 수 없습니다.");
             Destroy(copy);
-            _built = false;
+            _arm = null;
             return;
         }
 
@@ -263,18 +277,15 @@ public class GrenadeArmView : MonoBehaviour
         _finger = _animator.GetBoneTransform(HumanBodyBones.RightMiddleProximal);
 
         KeepRightHandOnly(copy);
-
-        _grenadeVisual = GrenadeModel.Create(_grenadeHeight).transform;
-        _grenadeVisual.name = "GrenadeInHand";
-        _grenadeVisual.SetParent(_camera, true);
-        foreach (Renderer renderer in _grenadeVisual.GetComponentsInChildren<Renderer>(true))
-        {
-            renderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
-        }
-
-        _grenadeVisual.gameObject.SetActive(false);
+        FirstPersonWeaponCamera.Register(_arm);
         _visible = true;
         SetVisible(false);
+    }
+
+    private void OnDestroy()
+    {
+        if (_grenadeVisual != null) Destroy(_grenadeVisual.gameObject);
+        if (_arm != null) Destroy(_arm.gameObject);
     }
 
     // 손과 손목 쪽 아래팔만 남긴다. (손에서 먼 총 부분, 팔꿈치 쪽은 지운다)

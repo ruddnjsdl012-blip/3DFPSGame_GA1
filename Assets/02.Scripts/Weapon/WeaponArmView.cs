@@ -45,31 +45,35 @@ public class WeaponArmView : MonoBehaviour
     {
         _body = GetComponent<FirstPersonBodyView>();
         _shove = GetComponent<PlayerShove>();
-        _camera = Camera.main != null ? Camera.main.transform : null;
-        if (_item != null && _camera != null)
+        ResolveCamera();
+    }
+
+    private void ResolveCamera()
+    {
+        if (_camera != null) return;
+        Camera camera = Camera.main;
+        if (camera == null) return;
+        _camera = camera.transform;
+        if (_item != null)
         {
             _item.SetParent(_camera, false);
             _item.gameObject.SetActive(false);
+            FirstPersonWeaponCamera.Register(_item);
         }
     }
 
     private void LateUpdate()
     {
-        if (_camera == null)
-        {
-            return;
-        }
+        ResolveCamera();
+        if (_camera == null) return;
 
-        if (!_built)
+        if (_body == null) _body = GetComponent<FirstPersonBodyView>();
+        if (!_built && _body != null && _body.IsCalibrated)
         {
-            if (_body == null || !_body.IsCalibrated)
-            {
-                return;
-            }
-
             Build();
         }
 
+        // 팔 보정/메시 읽기가 실패해도 무기 자체는 즉시 카메라 앞에 표시한다.
         bool show = Visible && Raise > 0.001f;
         SetShown(show);
         if (!show)
@@ -85,7 +89,7 @@ public class WeaponArmView : MonoBehaviour
         Vector3 hint = _camera.TransformPoint(ElbowHint);
         Quaternion rotation = _camera.rotation * Quaternion.Euler(35f * low - 10f * shove, -12f * shove, -12f * shove) * ItemRotation;
 
-        if (_arm != null)
+        if (_arm != null && _body != null)
         {
             _arm.localPosition = _body.NeutralLocalPosition + new Vector3(0.04f, -0.02f, 0.12f);
             _arm.localRotation = Quaternion.identity;
@@ -100,9 +104,13 @@ public class WeaponArmView : MonoBehaviour
         if (_item != null)
         {
             Vector3 palm = target;
-            if (_hand != null)
+            if (_hand != null && _renderers.Length > 0)
             {
-                palm = _finger != null ? Vector3.Lerp(_hand.position, _finger.position, 0.6f) : _hand.position + _camera.forward * 0.05f;
+                Vector3 solvedPalm = _finger != null ? Vector3.Lerp(_hand.position, _finger.position, 0.6f) : _hand.position + _camera.forward * 0.05f;
+                Vector3 cameraPalm = _camera.InverseTransformPoint(solvedPalm);
+                // 잘못된 리그/스케일 때문에 손뼈가 화면 밖에 있어도 무기가 따라 사라지지 않는다.
+                if (cameraPalm.z > 0.08f && cameraPalm.z < 1.2f && (solvedPalm - target).sqrMagnitude < 0.0225f)
+                    palm = solvedPalm;
             }
 
             _item.rotation = rotation;
@@ -164,8 +172,15 @@ public class WeaponArmView : MonoBehaviour
         _hand = _animator.GetBoneTransform(HumanBodyBones.RightHand);
         _finger = _animator.GetBoneTransform(HumanBodyBones.RightMiddleProximal);
         KeepRightHandOnly(copy);
+        FirstPersonWeaponCamera.Register(_arm);
         _shown = true;
         SetShown(false);
+    }
+
+    private void OnDestroy()
+    {
+        if (_item != null) Destroy(_item.gameObject);
+        if (_arm != null) Destroy(_arm.gameObject);
     }
 
     // ===================== 2관절 IK (GrenadeArmView와 같다) =====================

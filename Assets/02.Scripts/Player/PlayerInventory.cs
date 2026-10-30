@@ -7,6 +7,7 @@ using UnityEngine;
 //       치료 중에 Q나 왼쪽 클릭을 누르면 취소된다.
 //  - 수류탄: 최대 3개. 4번으로 들고 왼쪽 클릭을 떼서 던진다. 우클릭은 밀치기.
 // PlayerGunFire가 Player에 자동으로 붙인다. 화면 표시는 UI_SupplyHud.
+[DefaultExecutionOrder(-50)]
 public class PlayerInventory : MonoBehaviour
 {
     [Header("구급상자")]
@@ -20,7 +21,7 @@ public class PlayerInventory : MonoBehaviour
     [SerializeField] private int _startGrenades = 1;
 
     [Header("줍기")]
-    [SerializeField] private float _pickupDistance = 2.2f;
+    [SerializeField] private float _pickupDistance = 2.6f;
 
     private Player _player;
     private PlayerGunFire _gun;
@@ -29,6 +30,9 @@ public class PlayerInventory : MonoBehaviour
     private int _grenades;
     private float _healTimer = -1f;
     private Pickup _nearest;
+    private PlayerWeapons _weapons;
+    private Transform _camera;
+    private int _interactionFrame = -1;
 
     // 보급품 수나 치료 상태가 바뀌면 알린다. (옵저버 패턴: UI_SupplyHud가 구독)
     public event Action OnChanged;
@@ -39,6 +43,13 @@ public class PlayerInventory : MonoBehaviour
     public int MaxGrenades => _maxGrenades;
     public bool IsHealing => _healTimer >= 0f;
     public float HealProgress => IsHealing ? Mathf.Clamp01(_healTimer / _healTime) : 0f;
+    public bool InteractionConsumedThisFrame => _interactionFrame == Time.frameCount;
+    public bool HasPickupFocus => _nearest != null && !IsHealing && !Cursor.visible;
+
+    public void Notify(string message, Color color)
+    {
+        if (_hud != null) _hud.ShowToast(message, color);
+    }
 
     public void InterruptHealing()
     {
@@ -55,6 +66,8 @@ public class PlayerInventory : MonoBehaviour
 
     private void Start()
     {
+        _weapons = GetComponent<PlayerWeapons>();
+        _camera = Camera.main != null ? Camera.main.transform : null;
         _hud = UI_SupplyHud.Create(this);
     }
 
@@ -90,6 +103,13 @@ public class PlayerInventory : MonoBehaviour
 
     private void UpdatePickup()
     {
+        if (Cursor.visible)
+        {
+            if (_nearest != null) _nearest.SetHighlight(false);
+            _nearest = null;
+            _hud.SetPrompt(string.Empty);
+            return;
+        }
         Pickup nearest = FindNearest();
         if (nearest != _nearest)
         {
@@ -112,31 +132,40 @@ public class PlayerInventory : MonoBehaviour
         }
 
         string blocked = WhyCannotTake(_nearest);
-        _hud.SetPrompt(blocked ?? "[E] " + _nearest.DisplayName + (_nearest.Type == PickupType.Ammo ? " 채우기" : " 줍기"));
-        if (blocked == null && Input.GetKeyDown(KeyCode.E))
+        string action = _nearest.Type == PickupType.Ammo ? " 보충" : _nearest.Type == PickupType.Weapon ? " 습득 · 장착" : " 줍기";
+        _hud.SetPrompt(blocked ?? "[E] " + _nearest.DisplayName + action);
+        if (Input.GetKeyDown(KeyCode.E))
         {
-            Take(_nearest);
+            _interactionFrame = Time.frameCount;
+            if (blocked == null) Take(_nearest);
         }
     }
 
     private Pickup FindNearest()
     {
         Pickup best = null;
-        float bestDistance = _pickupDistance;
-        Vector3 me = transform.position;
+        if (_camera == null) return null;
+        float bestScore = float.MaxValue;
+        Vector3 me = _camera.position;
+        int worldMask = ~LayerMask.GetMask("Player", "Zombie");
         foreach (Pickup pickup in Pickup.All)
         {
-            Vector3 offset = pickup.transform.position - me;
-            if (Mathf.Abs(offset.y) > 2.2f)
+            if (pickup == null || !pickup.isActiveAndEnabled) continue;
+            Vector3 point = pickup.FocusPoint;
+            Vector3 offset = point - me;
+            float distance = offset.magnitude;
+            if (distance > _pickupDistance || Mathf.Abs(point.y - transform.position.y) > 1.8f)
             {
                 continue;
             }
 
-            offset.y = 0f;
-            float distance = offset.magnitude;
-            if (distance < bestDistance)
+            float facing = distance > 0.01f ? Vector3.Dot(_camera.forward, offset / distance) : 1f;
+            if (facing < 0.72f) continue;
+            float score = (1f - facing) * 8f + distance * 0.04f;
+            if (score >= bestScore || Physics.Linecast(me, point, worldMask, QueryTriggerInteraction.Ignore)) continue;
+            if (score < bestScore)
             {
-                bestDistance = distance;
+                bestScore = score;
                 best = pickup;
             }
         }
@@ -149,7 +178,10 @@ public class PlayerInventory : MonoBehaviour
     {
         switch (pickup.Type)
         {
+            case PickupType.Weapon:
+                return _weapons == null || !_weapons.CanPickup(pickup.Weapon) ? "이미 보유 중이거나 탄약이 가득 찼다" : null;
             case PickupType.Ammo:
+                if (_weapons != null) return _weapons.CanRefillAmmo ? null : "보충할 총기 탄약이 없다";
                 return _gun != null && _gun.ReserveAmmo >= _gun.MaxReserveAmmo ? "탄약이 가득 찼다" : null;
             case PickupType.Medkit:
                 return _medkits >= _maxMedkits ? "구급상자를 이미 가지고 있다" : null;
@@ -160,10 +192,17 @@ public class PlayerInventory : MonoBehaviour
 
     private void Take(Pickup pickup)
     {
+        if (pickup == null || WhyCannotTake(pickup) != null) return;
         switch (pickup.Type)
         {
+            case PickupType.Weapon:
+                if (_weapons == null || !_weapons.PickupWeapon(pickup.Weapon)) return;
+                GameSounds.Play2D("weapon_switch", 0.7f);
+                _hud.ShowToast(pickup.DisplayName + " 습득  [" + (int)pickup.Weapon + "] 장착", new Color(0.6f, 0.9f, 1f));
+                break;
             case PickupType.Ammo:
-                int added = _gun != null ? _gun.AddAmmo(_gun.MaxReserveAmmo) : 0;
+                int added = _weapons != null ? _weapons.RefillAmmo() : _gun != null ? _gun.AddAmmo(_gun.MaxReserveAmmo) : 0;
+                if (added <= 0) return;
                 GameSounds.Play2D("pickup_ammo", 0.9f);
                 _hud.ShowToast("탄약 +" + added, new Color(1f, 0.85f, 0.4f));
                 break;
@@ -181,8 +220,7 @@ public class PlayerInventory : MonoBehaviour
 
         if (!pickup.Reusable)
         {
-            pickup.SetHighlight(false);
-            Destroy(pickup.gameObject);
+            pickup.Consume();
             _nearest = null;
         }
 

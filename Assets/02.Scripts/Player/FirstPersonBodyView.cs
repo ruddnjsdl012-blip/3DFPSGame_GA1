@@ -73,11 +73,14 @@ public class FirstPersonBodyView : MonoBehaviour
     // 1인칭 모델 (GrenadeArmView가 복제해서 오른팔만 쓴다)
     public Transform ViewRoot => _view;
     public bool IsCalibrated => _view != null && _calibrateFrames <= 0;
+    public bool HasRifleVisual => IsCalibrated && _viewHand != null && _viewRenderers != null && _viewRenderers.Length > 0;
     public Vector3 NeutralLocalPosition => _baseOffset + _viewOffset;
 
     // 1인칭 총의 총구(총 끝) 위치. 아직 못 찾았으면 false
     public bool TryGetMuzzle(out Vector3 position)
     {
+        PlayerRifleView fallback = GetComponent<PlayerRifleView>();
+        if (fallback != null && fallback.TryGetMuzzle(out position)) return true;
         if (_muzzleBone == null || _calibrateFrames > 0)
         {
             position = Vector3.zero;
@@ -101,6 +104,8 @@ public class FirstPersonBodyView : MonoBehaviour
         _camera = camera.transform;
         _inventory = GetComponent<PlayerInventory>();
         _shove = GetComponent<PlayerShove>();
+        _weapons = GetComponent<PlayerWeapons>();
+        _rifleBlend = _weapons != null && _weapons.Current == WeaponSlot.Rifle && _weapons.HasWeapon(WeaponSlot.Rifle) ? 1f : 0f;
 
         // 1인칭 모델을 놓을 자리: 몸에서 Model과 눈(CameraPosition)의 차이 만큼
         Transform eye = transform.Find("CameraPosition");
@@ -143,6 +148,7 @@ public class FirstPersonBodyView : MonoBehaviour
 
         // 위치를 맞추기 전에는 보이지 않게 한다.
         SetViewVisible(false);
+        FirstPersonWeaponCamera.Register(_view);
 
         // 2. 몸은 숨기고 그림자만
         foreach (Renderer renderer in _bodyAnimator.GetComponentsInChildren<Renderer>(true))
@@ -280,6 +286,10 @@ public class FirstPersonBodyView : MonoBehaviour
 
         if (_viewHead != null)
         {
+            // 맨손/수류탄으로 총을 내린 오프셋을 눈 보정에 섞으면,
+            // AR 장착 시 그만큼 반대로 올라가 화면 밖으로 벗어난다.
+            _view.localPosition = _baseOffset + _viewOffset;
+            _view.localRotation = Quaternion.identity;
             Vector3 eye = _camera.position - _camera.forward * 0.08f;  // 머리 가운데는 눈보다 조금 뒤
             Vector3 shift = _camera.InverseTransformVector(eye - _viewHead.position);
             _baseOffset += shift;
@@ -287,7 +297,8 @@ public class FirstPersonBodyView : MonoBehaviour
         }
 
         FindMuzzle();
-        SetViewVisible(true);
+        _hiddenForGrenade = !(_weapons != null && _weapons.Current == WeaponSlot.Rifle && _weapons.HasWeapon(WeaponSlot.Rifle));
+        SetViewVisible(!_hiddenForGrenade);
     }
 
     // 총구 찾기: 1인칭 모델의 총(없으면 손) 메시 점들 중 시선 방향으로 가장 앞에 있는 점 = 총 끝.

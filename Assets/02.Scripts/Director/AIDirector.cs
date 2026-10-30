@@ -801,8 +801,11 @@ public class AIDirector : MonoBehaviour
         Vector3 radio = _radio != null ? _radio.position : _map.ExtractionPoint.position;
         bool near = Vector3.Distance(Flat(radio), Flat(_player.position)) < 3f;
         _hud.SetObjective(near ? "무전기로 구조를 요청하라" : "광장 가운데의 무전기로 가라");
-        _hud.SetPrompt(near ? "[E] 구조 요청" : string.Empty);
-        if (near && Input.GetKeyDown(KeyCode.E))
+        PlayerInventory inventory = _player.GetComponent<PlayerInventory>();
+        bool pickupUsed = inventory != null && inventory.InteractionConsumedThisFrame;
+        bool aimingPickup = inventory != null && inventory.HasPickupFocus;
+        _hud.SetPrompt(near && !aimingPickup ? "[E] 구조 요청" : string.Empty);
+        if (near && !aimingPickup && !pickupUsed && !Cursor.visible && Input.GetKeyDown(KeyCode.E))
         {
             StartFinale();
         }

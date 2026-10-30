@@ -20,6 +20,8 @@ public class PlayerShove : MonoBehaviour
     private PlayerInventory _inventory;
     private PlayerGrenade _grenade;
     private PlayerAxe _axe;
+    private PlayerWeapons _weapons;
+    private WeaponArmView _emptyHand;
     private Transform _camera;
     private float _started = -10f;
     private float _nextReady;
@@ -42,11 +44,18 @@ public class PlayerShove : MonoBehaviour
         _inventory = GetComponent<PlayerInventory>();
         _grenade = GetComponent<PlayerGrenade>();
         _axe = GetComponent<PlayerAxe>();
+        _weapons = GetComponent<PlayerWeapons>();
+        _emptyHand = WeaponArmView.Create(gameObject, null);
         _camera = Camera.main != null ? Camera.main.transform : null;
     }
 
     private void Update()
     {
+        if (_emptyHand != null)
+        {
+            _emptyHand.Visible = _weapons != null && _weapons.Current == WeaponSlot.None && IsActive;
+            _emptyHand.Raise = 1f;
+        }
         if (GameManager.Instance == null || GameManager.Instance.State != GameState.Playing || Cursor.visible)
         {
             _impactPending = false;
@@ -64,6 +73,7 @@ public class PlayerShove : MonoBehaviour
         _started = Time.time;
         _nextReady = Time.time + Mathf.Max(_cooldown, _motionTime);
         _impactPending = true;
+        if (_emptyHand != null && _weapons != null) _emptyHand.Visible = _weapons.Current == WeaponSlot.None;
         if (_inventory != null) _inventory.InterruptHealing();
         if (_grenade != null) _grenade.CancelChargeForShove();
         if (_axe != null) _axe.InterruptForShove();

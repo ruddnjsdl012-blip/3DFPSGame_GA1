@@ -4,10 +4,13 @@ using TMPro;
 
 public enum WeaponSlot
 {
+    None = 0,
     Axe = 1,       // 1번: 도끼 (근접)
     Revolver = 2,  // 2번: 리볼버 (6발, 예비탄 무한)
     Rifle = 3,     // 3번: AR (원래 총, PlayerGunFire)
     Grenade = 4,   // 4번: 수류탄 (PlayerGrenade)
+    Smg = 5,
+    Shotgun = 6,
 }
 
 // 무기 바꾸기 (1 도끼 / 2 리볼버 / 3 AR / 4 수류탄, 마우스 휠로도 바꾼다)
@@ -31,6 +34,8 @@ public class PlayerWeapons : MonoBehaviour
     private PlayerRevolver _revolver;
     private PlayerAxe _axe;
     private PlayerInventory _inventory;
+    private PlayerExtraGun _extra;
+    private int _ownedMask;
 
     private TextMeshProUGUI[] _slotTexts;
     private Image[] _slotBacks;
@@ -39,12 +44,70 @@ public class PlayerWeapons : MonoBehaviour
     public bool IsSwitching => _switchTimer > 0f;
 
     // 지금 무기가 쓸 수 있는 상태인가 (바꾸는 중이 아니고, 그 무기를 들고 있다)
-    public bool IsReady(WeaponSlot slot) => _current == slot && !IsSwitching;
+    public bool IsReady(WeaponSlot slot) => _current == slot && !IsSwitching && HasWeapon(slot);
+
+    public static string DisplayName(WeaponSlot slot)
+    {
+        switch (slot)
+        {
+            case WeaponSlot.Axe: return "도끼";
+            case WeaponSlot.Revolver: return "리볼버";
+            case WeaponSlot.Rifle: return "AR";
+            case WeaponSlot.Smg: return "SMG";
+            case WeaponSlot.Shotgun: return "산탄총";
+            case WeaponSlot.Grenade: return "수류탄";
+            default: return "맨손";
+        }
+    }
+
+    public bool HasWeapon(WeaponSlot slot)
+    {
+        if (slot == WeaponSlot.None) return false;
+        if (slot == WeaponSlot.Grenade) return _inventory != null && _inventory.Grenades > 0;
+        return (_ownedMask & (1 << (int)slot)) != 0;
+    }
+
+    public bool CanPickup(WeaponSlot slot)
+    {
+        if (slot != WeaponSlot.Axe && slot != WeaponSlot.Revolver && slot != WeaponSlot.Rifle
+            && slot != WeaponSlot.Smg && slot != WeaponSlot.Shotgun)
+        {
+            return false;
+        }
+
+        if (!HasWeapon(slot)) return true;
+        if (slot == WeaponSlot.Rifle) return _rifle != null && _rifle.ReserveAmmo < _rifle.MaxReserveAmmo;
+        return _extra != null && _extra.CanAddAmmo(slot);
+    }
+
+    public bool PickupWeapon(WeaponSlot slot)
+    {
+        if (!CanPickup(slot)) return false;
+        if (!HasWeapon(slot)) _ownedMask |= 1 << (int)slot;
+        else if (slot == WeaponSlot.Rifle) _rifle.AddAmmo(_rifle.MaxBulletCount);
+        else _extra.AddAmmo(slot, _extra.ClipSize(slot));
+        Select(slot);
+        RefreshSlotBar();
+        return true;
+    }
+
+    public bool CanRefillAmmo => (HasWeapon(WeaponSlot.Rifle) && _rifle != null && _rifle.ReserveAmmo < _rifle.MaxReserveAmmo)
+        || (HasWeapon(WeaponSlot.Smg) && _extra != null && _extra.CanAddAmmo(WeaponSlot.Smg))
+        || (HasWeapon(WeaponSlot.Shotgun) && _extra != null && _extra.CanAddAmmo(WeaponSlot.Shotgun));
+
+    public int RefillAmmo()
+    {
+        int added = 0;
+        if (HasWeapon(WeaponSlot.Rifle) && _rifle != null) added += _rifle.AddAmmo(_rifle.MaxReserveAmmo);
+        if (HasWeapon(WeaponSlot.Smg) && _extra != null) added += _extra.AddAmmo(WeaponSlot.Smg, int.MaxValue);
+        if (HasWeapon(WeaponSlot.Shotgun) && _extra != null) added += _extra.AddAmmo(WeaponSlot.Shotgun, int.MaxValue);
+        return added;
+    }
 
     // 무기별 화면 위치 (0 = 내려감, 1 = 올라옴) - 1인칭 모델들이 읽는다.
     public float Raise(WeaponSlot slot)
     {
-        if (_current != slot)
+        if (_current != slot || !HasWeapon(slot))
         {
             return 0f;
         }
@@ -74,14 +137,26 @@ public class PlayerWeapons : MonoBehaviour
         {
             _axe = gameObject.AddComponent<PlayerAxe>();
         }
-        _current = _startWeapon == WeaponSlot.Grenade ? WeaponSlot.Rifle : _startWeapon;
-        _previous = _current;
+        _extra = GetComponent<PlayerExtraGun>();
+        if (_extra == null) _extra = gameObject.AddComponent<PlayerExtraGun>();
+        if (GetComponent<PlayerRifleView>() == null) gameObject.AddComponent<PlayerRifleView>();
+        _ownedMask = 0;
+        _current = _previous = WeaponSlot.None;
     }
 
     private void Start()
     {
         _grenade = GetComponent<PlayerGrenade>();
+        _inventory = GetComponent<PlayerInventory>();
         BuildSlotBar();
+        if (FindAnyObjectByType<CityMapInfo>() == null) GrantStarterFallback();
+    }
+
+    public void GrantStarterFallback()
+    {
+        _ownedMask |= (1 << (int)WeaponSlot.Axe) | (1 << (int)WeaponSlot.Revolver) | (1 << (int)WeaponSlot.Rifle);
+        Select(HasWeapon(_startWeapon) && _startWeapon != WeaponSlot.Grenade ? _startWeapon : WeaponSlot.Rifle);
+        RefreshSlotBar();
     }
 
     private void Update()
@@ -96,7 +171,7 @@ public class PlayerWeapons : MonoBehaviour
         // 수류탄을 던졌으면 전에 쓰던 무기로 (오른쪽 클릭은 밀치기)
         if (_current == WeaponSlot.Grenade && !IsSwitching && _grenade != null && !_grenade.IsEquipped)
         {
-            Begin(_previous == WeaponSlot.Grenade ? WeaponSlot.Rifle : _previous, true);
+            Begin(HasWeapon(_previous) ? _previous : FirstOwned(), true);
         }
 
         bool healing = _inventory != null && _inventory.IsHealing;
@@ -105,18 +180,19 @@ public class PlayerWeapons : MonoBehaviour
             return;
         }
 
+        if (Cursor.visible) return;
+
         if (Input.GetKeyDown(KeyCode.Alpha1)) Select(WeaponSlot.Axe);
         else if (Input.GetKeyDown(KeyCode.Alpha2)) Select(WeaponSlot.Revolver);
         else if (Input.GetKeyDown(KeyCode.Alpha3)) Select(WeaponSlot.Rifle);
         else if (Input.GetKeyDown(KeyCode.Alpha4)) Select(WeaponSlot.Grenade);
+        else if (Input.GetKeyDown(KeyCode.Alpha5)) Select(WeaponSlot.Smg);
+        else if (Input.GetKeyDown(KeyCode.Alpha6)) Select(WeaponSlot.Shotgun);
 
         float wheel = Input.GetAxis("Mouse ScrollWheel");
         if (Mathf.Abs(wheel) > 0.01f && !Cursor.visible)
         {
-            int next = (int)(_pending == 0 ? _current : _pending) + (wheel < 0f ? 1 : -1);
-            if (next < 1) next = 3;
-            if (next > 3) next = 1;  // 휠은 1~3 (수류탄은 4번 키로)
-            Select((WeaponSlot)next);
+            CycleWeapon(wheel < 0f ? 1 : -1);
         }
 
         RefreshSlotBar();
@@ -124,6 +200,11 @@ public class PlayerWeapons : MonoBehaviour
 
     public void Select(WeaponSlot slot)
     {
+        if (!HasWeapon(slot))
+        {
+            if (_inventory != null) _inventory.Notify(DisplayName(slot) + " 없음  [E]로 습득", new Color(1f, 0.65f, 0.35f));
+            return;
+        }
         if (slot == _current && !IsSwitching)
         {
             return;
@@ -135,7 +216,34 @@ public class PlayerWeapons : MonoBehaviour
             return;
         }
 
-        Begin(slot, false);
+        Begin(slot, _current == WeaponSlot.None);
+    }
+
+    public void CycleWeapon(int direction)
+    {
+        int next = (int)(_pending == WeaponSlot.None ? _current : _pending);
+        for (int i = 0; i < 6; i++)
+        {
+            next += direction;
+            if (next < 1) next = 6;
+            if (next > 6) next = 1;
+            WeaponSlot slot = (WeaponSlot)next;
+            if (slot != WeaponSlot.Grenade && HasWeapon(slot))
+            {
+                Select(slot);
+                return;
+            }
+        }
+    }
+
+    private WeaponSlot FirstOwned()
+    {
+        for (int i = 1; i <= 6; i++)
+        {
+            WeaponSlot slot = (WeaponSlot)i;
+            if (slot != WeaponSlot.Grenade && HasWeapon(slot)) return slot;
+        }
+        return WeaponSlot.None;
     }
 
     private void Begin(WeaponSlot slot, bool skipLower)
@@ -143,8 +251,9 @@ public class PlayerWeapons : MonoBehaviour
         // 지금 무기 정리
         if (_current == WeaponSlot.Rifle && _rifle != null) _rifle.CancelReload();
         if (_current == WeaponSlot.Revolver && _revolver != null) _revolver.CancelReload();
+        if ((_current == WeaponSlot.Smg || _current == WeaponSlot.Shotgun) && _extra != null) _extra.CancelReload();
         if (_current == WeaponSlot.Grenade && _grenade != null && _grenade.IsEquipped) _grenade.Unequip();
-        if (_current != WeaponSlot.Grenade) _previous = _current;
+        if (_current != WeaponSlot.Grenade && _current != WeaponSlot.None) _previous = _current;
 
         _pending = slot;
         _lowering = !skipLower;
@@ -202,6 +311,17 @@ public class PlayerWeapons : MonoBehaviour
         color = Color.white;
         switch (_current)
         {
+            case WeaponSlot.None:
+                big = "--";
+                small = "미장착";
+                hint = "[E] 테이블의 무기 습득  /  우클릭 밀치기";
+                return true;
+            case WeaponSlot.Smg:
+            case WeaponSlot.Shotgun:
+                big = _extra != null ? _extra.Rounds(_current).ToString() : "0";
+                small = "/ " + (_extra != null ? _extra.Reserve(_current) : 0);
+                hint = _extra != null && _extra.IsReloading ? "재장전 중..." : DisplayName(_current) + "  [R] 재장전";
+                return true;
             case WeaponSlot.Revolver:
                 big = _revolver.Rounds.ToString();
                 small = "/ 무한";  // (∞ 기호는 한글 폰트에 없어서 글자로)
@@ -246,17 +366,17 @@ public class PlayerWeapons : MonoBehaviour
             }
         }
 
-        string[] names = { "1 도끼", "2 리볼버", "3 AR", "4 수류탄" };
-        _slotTexts = new TextMeshProUGUI[4];
-        _slotBacks = new Image[4];
-        for (int i = 0; i < 4; i++)
+        string[] names = { "1 도끼", "2 리볼버", "3 AR", "4 수류탄", "5 SMG", "6 산탄총" };
+        _slotTexts = new TextMeshProUGUI[6];
+        _slotBacks = new Image[6];
+        for (int i = 0; i < 6; i++)
         {
             GameObject back = new GameObject("Slot" + (i + 1), typeof(RectTransform), typeof(Image));
             RectTransform rect = (RectTransform)back.transform;
             rect.SetParent(canvasObject.transform, false);
             rect.anchorMin = rect.anchorMax = new Vector2(1f, 0f);
             rect.pivot = new Vector2(1f, 0f);
-            rect.anchoredPosition = new Vector2(-40f - (3 - i) * 84f, 276f);
+            rect.anchoredPosition = new Vector2(-40f - (5 - i) * 84f, 276f);
             rect.sizeDelta = new Vector2(78f, 34f);
             _slotBacks[i] = back.GetComponent<Image>();
             _slotBacks[i].raycastTarget = false;
@@ -284,6 +404,7 @@ public class PlayerWeapons : MonoBehaviour
     }
 
     private WeaponSlot _shownSlot;
+    private int _shownOwnedMask = -1;
 
     private void RefreshSlotBar()
     {
@@ -293,17 +414,20 @@ public class PlayerWeapons : MonoBehaviour
         }
 
         WeaponSlot shown = IsSwitching && _pending != 0 ? _pending : _current;
-        if (shown == _shownSlot)
+        int shownMask = _ownedMask | (HasWeapon(WeaponSlot.Grenade) ? 1 << 4 : 0);
+        if (shown == _shownSlot && shownMask == _shownOwnedMask)
         {
             return;  // 바뀌었을 때만 다시 그린다.
         }
 
         _shownSlot = shown;
-        for (int i = 0; i < 4; i++)
+        _shownOwnedMask = shownMask;
+        for (int i = 0; i < 6; i++)
         {
             bool active = (int)shown == i + 1;
+            bool owned = HasWeapon((WeaponSlot)(i + 1));
             _slotBacks[i].color = active ? new Color(1f, 0.85f, 0.4f, 0.75f) : new Color(0f, 0f, 0f, 0.4f);
-            _slotTexts[i].color = active ? new Color(0.1f, 0.08f, 0.05f) : new Color(1f, 1f, 1f, 0.75f);
+            _slotTexts[i].color = active ? new Color(0.1f, 0.08f, 0.05f) : new Color(1f, 1f, 1f, owned ? 0.75f : 0.25f);
             _slotTexts[i].fontStyle = active ? FontStyles.Bold : FontStyles.Normal;
         }
     }
