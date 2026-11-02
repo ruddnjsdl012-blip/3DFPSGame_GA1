@@ -1,0 +1,13 @@
+﻿Structural campaign v3
+Main route: 1960.4 m
+Native shortest path: 1652.1 m
+Previous route: 1526.3 m
+Route points: 170
+Connected spawns: 329
+Rejected spawns: 3
+Safe rooms, radio, extraction: connected
+Critical route capsule clearance: passed
+Existing gameplay component instance: preserved
+Environment texture/model assets: shared, not copied
+Scene: Assets/01.Scenes/L4D.unity
+Backup: C:\Users\ruddn\3DFPSGame_GA1\Library\L4D_LinearRebuild\20261102_140238_79d751\L4D.unity
