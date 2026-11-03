@@ -9,6 +9,7 @@ public class PlayerRotate : MonoBehaviour
     private void Update()
     {
         if (GameManager.Instance.State != GameState.Playing) return;
+        if (Time.timeScale <= 0f) return; // 일시정지 중에는 회전하지 않는다
 
         float mouseX = Input.GetAxis("Mouse X");
         _accumulationX += mouseX * _rotationSpeed * Time.deltaTime;

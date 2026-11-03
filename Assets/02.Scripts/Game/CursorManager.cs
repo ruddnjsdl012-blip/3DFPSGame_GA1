@@ -12,6 +12,7 @@ public class CursorManager : MonoBehaviour
     private void Update()
     {
         if (GameManager.Instance.State != GameState.Playing) return;
+        if (Time.timeScale <= 0f) return; // 일시정지 중에는 커서를 건드리지 않는다
 
         if (Input.GetKeyDown(KeyCode.LeftAlt))
         {

@@ -79,3 +79,6 @@ crashlytics-build.properties
 
 # macOS Finder 생성 파일
 .DS_Store
+
+# 벤치마크 결과물
+/Benchmarks/
