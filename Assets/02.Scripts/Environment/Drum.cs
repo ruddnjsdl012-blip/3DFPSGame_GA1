@@ -49,6 +49,7 @@ public class Drum : MonoBehaviour, IDamageable
         effect.Play();
 
         GameSounds.PlayAt("explosion", transform.position, 1f, 0f, 80f);
+        LightBurst.Explosion(transform.position);
         CameraShake.ShakeAt(transform.position, 0.7f, 25f);
 
         // 2. 위로 튀어오르며 빙글빙글 돈다.

@@ -15,6 +15,7 @@ public class Bomb : MonoBehaviour
         effect.Play();
 
         GameSounds.PlayAt("explosion", transform.position, 1f, 0f, 80f);
+        LightBurst.Explosion(transform.position);
         CameraShake.ShakeAt(transform.position, 0.7f, 25f);
 
         ApplyAreaDamage();

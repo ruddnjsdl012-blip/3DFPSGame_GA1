@@ -336,10 +336,10 @@ MonoBehaviour:
   _maxHealth: 30
   _health: 30
   _alwaysChase: 1
-  _closeRepathInterval: 0.07
+  _closeRepathInterval: 0.12
   _closeRepathDistance: 12
-  _repathInterval: 0.15
-  _farRepathInterval: 0.3
+  _repathInterval: 0.25
+  _farRepathInterval: 0.6
   _farRepathDistance: 25
   _commonHitStun: 0.18
   _useBloodPrefab: 0

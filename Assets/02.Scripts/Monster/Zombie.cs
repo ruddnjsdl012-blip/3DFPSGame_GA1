@@ -126,6 +126,17 @@ public class Zombie : MonoBehaviour, IDamageable
         _special = GetComponent<SpecialZombie>();
         if (_special == null)
         {
+            // 몸 조각 14개를 하나로 합쳐 스키닝·그리기·그림자 비용을 줄인다. (특수 좀비는 모델을 바꾸므로 제외)
+            if (_animator != null)
+            {
+                // 렌더러가 바뀌었으므로 Animator를 다시 묶는다. 안 하면 '안 보인다'고 판단해 동작이 멈춘다.
+                if (ZombieMeshMerge.Merge(_animator.transform))
+                {
+                    _animator.Rebind();
+                }
+            }
+
+
             _agent.acceleration = Mathf.Max(_agent.acceleration, 28f);
             _agent.angularSpeed = Mathf.Max(_agent.angularSpeed, 900f);
         }
@@ -616,11 +627,11 @@ public class Zombie : MonoBehaviour, IDamageable
 
         if (_player != null)
         {
+            // 발밑 지점을 못 찾아도 멈추지 않는다. 플레이어 위치로 그대로 요청하면 갈 수 있는 곳까지 간다.
             if (!ZombieNavigationTarget.TryGet(_player.transform, _agent.agentTypeID, _agent.areaMask,
                 gameObject.layer, out destination))
             {
-                _nextPathTime = Time.time + 0.2f;
-                return;
+                destination = _player.transform.position;
             }
         }
 

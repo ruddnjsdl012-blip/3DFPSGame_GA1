@@ -73,6 +73,7 @@ public class AIDirector : MonoBehaviour
     private Phase _phase = Phase.Waiting;
     private Transform _player;
     private Player _playerHealth;
+    private PlayerInventory _playerInventory;  // 광장에서 매 프레임 GetComponent 하지 않게 한 번만 찾는다.
     private Camera _camera;
     private DirectorHUD _hud;
     private AudioSource _audio;
@@ -109,6 +110,12 @@ public class AIDirector : MonoBehaviour
     private bool _finaleTankSpawned;
 
     public static AIDirector Instance { get; private set; }
+
+    // 후처리(CombatPostFX)가 읽는 긴장도: 0 ~ 1. 맞을수록 오르고 시간이 지나면 내려간다.
+    public float Tension => _intensity;
+
+    // 호드가 몰려오는 중이거나 피날레/탈출 중이면 true
+    public bool HordeActive => _hordeQueue > 0 || _phase == Phase.Finale || _phase == Phase.Escape;
 
     private void Awake()
     {
@@ -801,7 +808,12 @@ public class AIDirector : MonoBehaviour
         Vector3 radio = _radio != null ? _radio.position : _map.ExtractionPoint.position;
         bool near = Vector3.Distance(Flat(radio), Flat(_player.position)) < 3f;
         _hud.SetObjective(near ? "무전기로 구조를 요청하라" : _map.TextRadioFar);
-        PlayerInventory inventory = _player.GetComponent<PlayerInventory>();
+        if (_playerInventory == null)
+        {
+            _playerInventory = _player.GetComponent<PlayerInventory>();
+        }
+
+        PlayerInventory inventory = _playerInventory;
         bool pickupUsed = inventory != null && inventory.InteractionConsumedThisFrame;
         bool aimingPickup = inventory != null && inventory.HasPickupFocus;
         _hud.SetPrompt(near && !aimingPickup ? "[E] 구조 요청" : string.Empty);

@@ -15,9 +15,9 @@ RenderSettings:
   m_ObjectHideFlags: 0
   serializedVersion: 10
   m_Fog: 1
-  m_FogColor: {r: 0.44567707, g: 0.50482684, b: 0.53764707, a: 1}
-  m_FogMode: 1
-  m_FogDensity: 0.0048
+  m_FogColor: {r: 0.48, g: 0.54, b: 0.57, a: 1}
+  m_FogMode: 3
+  m_FogDensity: 0.0075
   m_LinearFogStart: 18
   m_LinearFogEnd: 230
   m_AmbientSkyColor: {r: 0.4971429, g: 0.51714295, b: 0.5400001, a: 1.35}
@@ -19492,12 +19492,12 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::PlayerFlashlight
   _toggleKey: 102
-  _startOn: 0
-  _color: {r: 1, g: 0.95, b: 0.85, a: 1}
-  _intensity: 9
-  _range: 40
-  _spotAngle: 60
-  _innerSpotAngle: 30
+  _startOn: 1
+  _color: {r: 1, g: 0.97, b: 0.9, a: 1}
+  _intensity: 60
+  _range: 100
+  _spotAngle: 70
+  _innerSpotAngle: 40
   _offset: {x: 0.18, y: -0.15, z: 0.25}
   _followSpeed: 14
 --- !u!1 &332700054
@@ -47899,7 +47899,7 @@ MonoBehaviour:
   priority: 0
   blendDistance: 0
   weight: 1
-  sharedProfile: {fileID: 11400000, guid: dcab6c4777b3247489d745eb6060a1c2, type: 2}
+  sharedProfile: {fileID: 11400000, guid: e698f17779db41845944e551b77e65cd, type: 2}
 --- !u!4 &832575519
 Transform:
   m_ObjectHideFlags: 0
@@ -113591,28 +113591,28 @@ MonoBehaviour:
   _map: {fileID: 679220658}
   _population: 2.5
   _aliveLimit: 90
-  _wanderers: 10
-  _spawnInterval: 2.5
-  _maxCommons: 14
+  _wanderers: 16
+  _spawnInterval: 1.6
+  _maxCommons: 24
   _spawnMinDistance: 18
   _spawnMaxDistance: 55
   _peakIntensity: 0.75
   _relaxTime: 18
-  _hordeInterval: {x: 55, y: 80}
-  _hordeSize: 16
-  _maxAlive: 32
+  _hordeInterval: {x: 40, y: 60}
+  _hordeSize: 26
+  _maxAlive: 50
   _finaleTime: 100
-  _finaleMaxAlive: 40
-  _finaleSpawnInterval: 1.2
+  _finaleMaxAlive: 60
+  _finaleSpawnInterval: 0.8
   _swarmInterval: 25
-  _swarmSize: 20
+  _swarmSize: 30
   _extractionRadius: 5
   _specialInterval: {x: 28, y: 42}
   _maxSpecials: 2
   _runnerPack: 3
   _finaleSpecialInterval: 18
   _tankRouteProgress: 0.55
-  _bileHordeSize: 12
+  _bileHordeSize: 18
 --- !u!4 &2033161488
 Transform:
   m_ObjectHideFlags: 0

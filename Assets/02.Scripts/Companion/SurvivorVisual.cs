@@ -6,6 +6,10 @@ using UnityEngine.Rendering;
 public sealed class SurvivorVisual : MonoBehaviour
 {
     private Animator _animator;
+    // 애니메이터 파라미터는 문자열 대신 해시로 쓴다. (동료마다 매 프레임 쓴다)
+    private static readonly int MoveMotionHash = Animator.StringToHash("MoveMotion");
+    private static readonly int IsReloadingHash = Animator.StringToHash("IsReloading");
+    private static readonly int AttackHash = Animator.StringToHash("Attack");
     private Transform _hand;
     private Transform _upper;
     private Transform _lower;
@@ -132,8 +136,8 @@ public sealed class SurvivorVisual : MonoBehaviour
         SetWeapon(weapon);
         if (_animator != null)
         {
-            if (_moveParameter) _animator.SetFloat("MoveMotion", Mathf.Clamp01(velocity.magnitude / 5.5f), 0.12f, Time.deltaTime);
-            if (_reloadParameter) _animator.SetBool("IsReloading", reloading);
+            if (_moveParameter) _animator.SetFloat(MoveMotionHash, Mathf.Clamp01(velocity.magnitude / 5.5f), 0.12f, Time.deltaTime);
+            if (_reloadParameter) _animator.SetBool(IsReloadingHash, reloading);
         }
     }
 
@@ -152,7 +156,7 @@ public sealed class SurvivorVisual : MonoBehaviour
     public void Attack()
     {
         _swingAt = Time.time;
-        if (_animator != null && _attackParameter) _animator.SetTrigger("Attack");
+        if (_animator != null && _attackParameter) _animator.SetTrigger(AttackHash);
     }
 
     public void Shot(Vector3 end)
@@ -160,10 +164,11 @@ public sealed class SurvivorVisual : MonoBehaviour
         if (!_built) return;
         _kick = 1f;
         _flashUntil = Time.time + 0.045f;
+        LightBurst.Muzzle(Muzzle);
         _tracer.SetPosition(0, Muzzle);
         _tracer.SetPosition(1, end);
         _tracer.enabled = true;
-        if (_animator != null && _attackParameter) _animator.SetTrigger("Attack");
+        if (_animator != null && _attackParameter) _animator.SetTrigger(AttackHash);
     }
 
     private void LateUpdate()

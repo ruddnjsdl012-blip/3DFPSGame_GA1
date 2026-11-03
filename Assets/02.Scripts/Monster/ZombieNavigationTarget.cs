@@ -58,6 +58,12 @@ public static class ZombieNavigationTarget
             _valid = NavMesh.SamplePosition(wanted, out hit, 4f, filter);
         }
 
+        // 플레이어가 지붕·상자 위처럼 NavMesh에서 멀리 있어도, 가장 가까운 걸을 수 있는 곳까지는 쫓아간다.
+        if (!_valid)
+        {
+            _valid = NavMesh.SamplePosition(wanted, out hit, 15f, filter);
+        }
+
         _position = _valid ? hit.position : wanted;
         position = _position;
         return _valid;

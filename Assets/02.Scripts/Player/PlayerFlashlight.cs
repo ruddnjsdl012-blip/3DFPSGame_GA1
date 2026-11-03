@@ -42,6 +42,8 @@ public class PlayerFlashlight : MonoBehaviour
         _light.spotAngle = _spotAngle;
         _light.innerSpotAngle = _innerSpotAngle;
         _light.shadows = LightShadows.Soft;
+        // 그림자 해상도 단계는 URP 기본값(High)을 그대로 쓴다. URP 17에서는 코드로 바꿀 수 없는 읽기 전용 값이다.
+        VolumetricBeam.Attach(_light, 1f);   // 안개 속 빛줄기
         _light.enabled = _startOn;
 
         _audio = gameObject.AddComponent<AudioSource>();

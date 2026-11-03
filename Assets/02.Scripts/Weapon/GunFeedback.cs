@@ -77,6 +77,7 @@ public class GunFeedback : MonoBehaviour
     private SpriteRenderer[] _flashSprites;
     private Light _flashLight;
     private float _flashTimer;
+    private float _flashPeak;   // 이번 발사의 조명 세기 (시간이 지나며 줄어든다)
     private Transform _muzzleOverride;  // 이번 발의 총구 (리볼버)
 
     private void Start()
@@ -269,8 +270,8 @@ public class GunFeedback : MonoBehaviour
         _flashLight = _flash.gameObject.AddComponent<Light>();
         _flashLight.type = LightType.Point;
         _flashLight.color = _flashColor;
-        _flashLight.range = 9f;
-        _flashLight.intensity = 4f;
+        _flashLight.range = 11f;
+        _flashLight.intensity = 5f;
         _flashLight.shadows = LightShadows.None;
         _flash.gameObject.SetActive(false);
     }
@@ -285,7 +286,8 @@ public class GunFeedback : MonoBehaviour
         _flash.position = MuzzlePosition();
         _flash.rotation = _camera.transform.rotation * Quaternion.Euler(0f, 0f, Random.Range(0f, 360f));
         _flash.localScale = Vector3.one * (_flashSize * Random.Range(0.8f, 1.25f));
-        _flashLight.intensity = Random.Range(3f, 5f);
+        _flashPeak = Random.Range(4.5f, 6.5f);
+        _flashLight.intensity = _flashPeak;
         _flash.gameObject.SetActive(true);
         _flashTimer = _flashTime;
     }
@@ -306,6 +308,10 @@ public class GunFeedback : MonoBehaviour
 
         // 불꽃이 켜져 있는 동안 총이 흔들려도 총 끝에 붙어 있게
         _flash.position = MuzzlePosition();
+
+        // 조명은 한 번에 꺼지지 않고 빠르게 줄어든다. (주변 벽/바닥이 번쩍였다 사라지는 느낌)
+        float fade = Mathf.Clamp01(_flashTimer / Mathf.Max(0.001f, _flashTime));
+        _flashLight.intensity = _flashPeak * fade * fade;
     }
 
     // 총 끝 위치: 총 메시에서 시선 방향으로 가장 앞쪽 → 없으면 오른손 앞 → 없으면 카메라 기준 고정 위치

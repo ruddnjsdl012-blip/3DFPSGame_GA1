@@ -825,24 +825,17 @@ public static class L4DAssignmentTools
     public static void RestoreGpu()
     {
         int restored = 0;
+        // 파일 내용을 그대로 되돌린다. (.meta guid 유지 → 참조 유지, 렌더러 기능이 백업 파일을 가리키지 않음)
+        AssetDatabase.SaveAssets();
         foreach (string path in new[] { UrpAssetPath, UrpRendererPath })
         {
             string backup = BackupFolder + "/" + Path.GetFileName(path);
-            Object source = AssetDatabase.LoadMainAssetAtPath(backup);
-            Object target = AssetDatabase.LoadMainAssetAtPath(path);
-            if (source == null || target == null) continue;
-            EditorUtility.CopySerialized(source, target);
-            foreach (ScriptableObject sub in AssetDatabase.LoadAllAssetsAtPath(backup).OfType<ScriptableObject>().Where(o => o != source))
-            {
-                ScriptableObject match = AssetDatabase.LoadAllAssetsAtPath(path).OfType<ScriptableObject>().FirstOrDefault(o => o.GetType() == sub.GetType() && o.name == sub.name);
-                if (match != null) EditorUtility.CopySerialized(sub, match);
-            }
-
-            EditorUtility.SetDirty(target);
+            if (!File.Exists(backup)) continue;
+            File.Copy(backup, path, true);
+            AssetDatabase.ImportAsset(path, ImportAssetOptions.ForceUpdate);
             restored++;
         }
 
-        AssetDatabase.SaveAssets();
         EditorUtility.DisplayDialog("되돌리기", restored > 0 ? "URP 설정 " + restored + "개를 Before 상태로 되돌렸습니다.\n(소품 그림자/지형 설정은 백업 씬으로 되돌리세요)" : "백업이 없습니다.", "확인");
     }
 
