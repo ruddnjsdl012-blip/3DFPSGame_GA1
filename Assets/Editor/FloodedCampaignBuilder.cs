@@ -345,6 +345,67 @@ public static class FloodedCampaignBuilder
         WriteReport(success);
     }
 
+    // 철교 양 끝과 지형 사이에 틈(남쪽 약 2 m, 북쪽 약 5 m)이 있어 NavMesh가 끊겼다. (플레이어는 점프로 건넜지만 좀비/동료는 못 건넘)
+    // 고친 높이 데이터(CampaignHeights.bytes)에서 다리 주변만 지형에 다시 써 넣고 NavMesh를 다시 굽는다. (맵 전체를 다시 만들 필요 없음)
+    [MenuItem(Menu + "캠페인 맵 철교 끊김 고치기 (지형 + NavMesh)", priority = 3)]
+    public static void FixBridge()
+    {
+        CityMapInfo info = FindCampaign();
+        Layout layout = LoadLayout(out string error);
+        Terrain terrain = info != null ? info.GetComponentInChildren<Terrain>() : null;
+        if (info == null || layout == null || terrain == null)
+        {
+            EditorUtility.DisplayDialog("캠페인 맵", info == null ? "FloodedCampaign이 있는 L4D 씬을 연 뒤 다시 실행해 주세요." : error ?? "지형이 없습니다.", "확인");
+            return;
+        }
+
+        Log.Clear();
+        Warnings.Clear();
+        bool success = false;
+        try
+        {
+            Progress("철교 양 끝 지형 고치기", 0.1f);
+            byte[] bytes = File.ReadAllBytes(HeightsPath);
+            const int x0 = 868;
+            const int z0 = 552;
+            const int width = 44;
+            const int depth = 108;
+            float[,] heights = new float[depth, width];
+            for (int z = 0; z < depth; z++)
+            {
+                for (int x = 0; x < width; x++)
+                {
+                    int i = ((z0 + z) * HeightRes + x0 + x) * 2;
+                    heights[z, x] = (bytes[i] | (bytes[i + 1] << 8)) / 65535f;
+                }
+            }
+
+            terrain.terrainData.SetHeights(x0, z0, heights);
+            EditorUtility.SetDirty(terrain.terrainData);
+            AssetDatabase.SaveAssets();
+            Log.Add("✔ 철교 남쪽(z 565~579)과 북쪽(z 632~646) 끝을 다리 상판 높이(15 m)까지 메워 틈을 없앴습니다.");
+            Progress("NavMesh 굽는 중", 0.3f);
+            Physics.SyncTransforms();
+            BakeNavMesh(info.gameObject, layout);
+            Progress("검사", 0.9f);
+            Verify(layout, info);
+            EditorSceneManager.MarkSceneDirty(info.gameObject.scene);
+            EditorSceneManager.SaveScene(info.gameObject.scene);
+            success = true;
+        }
+        catch (Exception exception)
+        {
+            Debug.LogException(exception);
+            Warnings.Add("❌ 오류: " + exception.Message);
+        }
+        finally
+        {
+            EditorUtility.ClearProgressBar();
+        }
+
+        WriteReport(success);
+    }
+
     [MenuItem(Menu + "캠페인 맵 검사 (경로 길이·막힘·누수)", priority = 2)]
     public static void VerifyOnly()
     {
